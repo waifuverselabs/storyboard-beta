@@ -162,12 +162,14 @@ export async function smartStitch({
     }
   }
 
-  const vIn = names.map((_, i) => `[nv${i}]`).join("");
-  const aIn = anyAudio ? names.map((_, i) => `[na${i}]`).join("") : "";
+  // concat filter expects inputs interleaved per segment: [v0][a0][v1][a1]...
+  const segIn = names
+    .map((_, i) => (anyAudio ? `[nv${i}][na${i}]` : `[nv${i}]`))
+    .join("");
   filters.push(
     anyAudio
-      ? `${vIn}${aIn}concat=n=${names.length}:v=1:a=1[outv][outa]`
-      : `${vIn}concat=n=${names.length}:v=1:a=0[outv]`
+      ? `${segIn}concat=n=${names.length}:v=1:a=1[outv][outa]`
+      : `${segIn}concat=n=${names.length}:v=1:a=0[outv]`
   );
 
   const mapArgs = anyAudio

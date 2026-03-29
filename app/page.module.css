@@ -23,7 +23,7 @@
 .logoMark {
   width: 48px;
   height: 48px;
-  background: #ff69b4;
+  background: #ff1493;
   color: #fff;
   font-size: 14px;
   font-weight: 900;
@@ -87,11 +87,11 @@
 }
 
 .dropZone.loaded {
-  border-color: #ff69b4;
+  border-color: #ff1493;
 }
 
 .dropZone.dragOver {
-  border-color: #ff69b4;
+  border-color: #ff1493;
   background: #1a0a12;
 }
 
