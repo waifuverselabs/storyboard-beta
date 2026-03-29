@@ -15,7 +15,6 @@ export async function getFFmpeg(
 
   if (onLog) {
     ffmpeg.on("log", ({ message }) => {
-      // Filter noisy ffmpeg startup lines
       if (
         !message.startsWith("ffmpeg version") &&
         !message.startsWith("  built") &&
@@ -43,6 +42,7 @@ export interface VideoInfo {
   height: number;
   fps: number;
   hasAudio: boolean;
+  duration: number; // seconds
 }
 
 function parseFps(str: string): number {
@@ -55,10 +55,6 @@ function parseFps(str: string): number {
   return 30;
 }
 
-/**
- * Probe a file using ffmpeg -i and parse stderr output.
- * ffmpeg.wasm doesn't include ffprobe, so we use the -i trick.
- */
 export async function probeFile(
   ffmpeg: FFmpeg,
   filename: string
@@ -68,7 +64,6 @@ export async function probeFile(
   ffmpeg.on("log", handler);
 
   try {
-    // This intentionally "fails" — we just want the stream info printed to log
     await ffmpeg.exec(["-i", filename, "-f", "null", "-"]).catch(() => {});
   } finally {
     ffmpeg.off("log", handler);
@@ -76,15 +71,21 @@ export async function probeFile(
 
   const combined = logs.join("\n");
 
-  // Parse: Video: h264 (High), yuv420p, 1920x1080 [SAR ...], 30 fps
   const videoMatch = combined.match(
     /Video:\s+(\w+)[^,]*,\s*[^,]+,\s*(\d+)x(\d+)[^,]*,?\s*(?:[\d.]+ kb\/s,\s*)?([\d.]+(?:\/\d+)?) (?:fps|tbr)/
   );
   const audioMatch = combined.match(/Audio:/);
+  const durMatch = combined.match(/Duration:\s+(\d+):(\d+):([\d.]+)/);
 
   if (!videoMatch) {
     throw new Error("Could not read video stream info. Is this a valid video?");
   }
+
+  const duration = durMatch
+    ? parseInt(durMatch[1]) * 3600 +
+      parseInt(durMatch[2]) * 60 +
+      parseFloat(durMatch[3])
+    : 0;
 
   return {
     codec: videoMatch[1],
@@ -92,13 +93,14 @@ export async function probeFile(
     height: parseInt(videoMatch[3]),
     fps: parseFps(videoMatch[4]),
     hasAudio: !!audioMatch,
+    duration,
   };
 }
 
 // Cap the long edge to keep ffmpeg.wasm within its WASM heap limit.
-// A 2784×4096 frame is ~43 MB of YUV data per buffer; with B-frame lookahead
-// ffmpeg holds several at once and crashes. 1280px long edge is safe.
-const MAX_LONG_EDGE = 1280;
+// 2784×4096 = ~43 MB of raw YUV per frame; with B-frame lookahead ffmpeg
+// holds many at once and hits the WASM heap ceiling.
+const MAX_LONG_EDGE = 1920;
 
 function clampRes(w: number, h: number): { w: number; h: number } {
   const longest = Math.max(w, h);
@@ -140,85 +142,123 @@ export async function smartStitch({
     const info = await probeFile(ffmpeg, names[i]);
     infos.push(info);
     onLog(
-      `Video ${i + 1}: ${info.codec} ${info.width}×${info.height} @ ${info.fps}fps${info.hasAudio ? "" : " [no audio]"}`
+      `Video ${i + 1}: ${info.codec} ${info.width}×${info.height} @ ${info.fps}fps` +
+        (info.hasAudio ? "" : " [no audio]")
     );
   }
-  onProgress(30);
+  onProgress(25);
 
   const ref = infos[0];
   const anyAudio = infos.some((v) => v.hasAudio);
-
   const { w: outW, h: outH } = clampRes(ref.width, ref.height);
+
   if (outW !== ref.width || outH !== ref.height) {
-    onLog(`Scaling output down to ${outW}×${outH} (source ${ref.width}×${ref.height} exceeds safe limit)`);
+    onLog(
+      `Clamping to ${outW}×${outH} (${ref.width}×${ref.height} exceeds WASM safe limit)`
+    );
   }
 
-  // Single-pass filter_complex: normalize all inputs then concat.
-  // Avoids intermediate files and the corrupt-NAL issues that come from
-  // encoding a file twice (normalize pass → concat pass).
-  onLog(`Concatenating ${names.length} videos…`);
-
-  const inputArgs = names.flatMap((n) => ["-i", n]);
-  const filters: string[] = [];
+  // --- Phase 1: normalize each video independently ---
+  // One ffmpeg call per video keeps peak memory bounded to a single clip.
+  // Videos that only need an audio track added use -c:v copy (no re-encode).
+  // Videos that need re-encode use ultrafast preset for speed.
+  const readyNames: string[] = [];
 
   for (let i = 0; i < names.length; i++) {
-    // Scale to output dims (letterbox if needed), normalize fps, reset PTS
-    filters.push(
-      `[${i}:v]` +
-        `scale=${outW}:${outH}:force_original_aspect_ratio=decrease,` +
-        `pad=${outW}:${outH}:(ow-iw)/2:(oh-ih)/2,` +
-        `fps=${ref.fps},setpts=PTS-STARTPTS[nv${i}]`
-    );
-    if (anyAudio) {
-      if (infos[i].hasAudio) {
-        // Normalize to stereo 44100 and reset PTS
-        filters.push(
-          `[${i}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,asetpts=PTS-STARTPTS[na${i}]`
-        );
-      } else {
-        // Generate silence for video-only clips
-        filters.push(`anullsrc=channel_layout=stereo:sample_rate=44100[na${i}]`);
-      }
+    const info = infos[i];
+    const needsVideoRecode =
+      info.width !== outW ||
+      info.height !== outH ||
+      info.fps !== ref.fps;
+    const needsAudio = anyAudio && !info.hasAudio;
+    const needsAudioRecode = anyAudio && info.hasAudio;
+
+    if (!needsVideoRecode && !needsAudio && !needsAudioRecode) {
+      onLog(`Video ${i + 1}: OK ✓`);
+      readyNames.push(names[i]);
+      onProgress(25 + ((i + 1) / names.length) * 55);
+      continue;
     }
+
+    const outName = `norm_${i}.mp4`;
+
+    if (!needsVideoRecode && needsAudio) {
+      // Only add silent audio — copy video stream untouched (fast)
+      onLog(`Video ${i + 1}: Adding audio track…`);
+      const exit = await ffmpeg.exec([
+        "-i", names[i],
+        "-f", "lavfi",
+        "-i", `anullsrc=channel_layout=stereo:sample_rate=44100`,
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-shortest",
+        outName,
+      ]);
+      if (exit !== 0) throw new Error(`Audio add failed for video ${i + 1}`);
+    } else {
+      // Re-encode video (and audio if needed). ultrafast preset for speed.
+      onLog(`Video ${i + 1}: Re-encoding…`);
+      const vf = `scale=${outW}:${outH}:force_original_aspect_ratio=decrease,` +
+        `pad=${outW}:${outH}:(ow-iw)/2:(oh-ih)/2,fps=${ref.fps}`;
+
+      const audioArgs = anyAudio
+        ? info.hasAudio
+          ? ["-c:a", "aac", "-ar", "44100", "-ac", "2"]
+          : ["-f", "lavfi", "-i", `anullsrc=channel_layout=stereo:sample_rate=44100`,
+             "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest"]
+        : ["-an"];
+
+      // For lavfi input we need to insert it before output args
+      const hasLavfi = anyAudio && !info.hasAudio;
+      const args = hasLavfi
+        ? [
+            "-i", names[i],
+            "-f", "lavfi", "-i", `anullsrc=channel_layout=stereo:sample_rate=44100`,
+            "-vf", vf,
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+            "-c:a", "aac", "-ar", "44100", "-ac", "2",
+            "-shortest",
+            outName,
+          ]
+        : [
+            "-i", names[i],
+            "-vf", vf,
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+            ...audioArgs,
+            outName,
+          ];
+
+      const exit = await ffmpeg.exec(args);
+      if (exit !== 0) throw new Error(`Re-encode failed for video ${i + 1}`);
+    }
+
+    onLog(`Video ${i + 1}: Done ✓`);
+    readyNames.push(outName);
+    onProgress(25 + ((i + 1) / names.length) * 55);
   }
 
-  // concat filter expects inputs interleaved per segment: [v0][a0][v1][a1]...
-  const segIn = names
-    .map((_, i) => (anyAudio ? `[nv${i}][na${i}]` : `[nv${i}]`))
-    .join("");
-  filters.push(
-    anyAudio
-      ? `${segIn}concat=n=${names.length}:v=1:a=1[outv][outa]`
-      : `${segIn}concat=n=${names.length}:v=1:a=0[outv]`
-  );
+  // --- Phase 2: concat copy — zero re-encoding, instant ---
+  onLog("Stitching…");
+  const listContent = readyNames.map((n) => `file '${n}'`).join("\n");
+  await ffmpeg.writeFile("list.txt", listContent);
 
-  const mapArgs = anyAudio
-    ? ["-map", "[outv]", "-map", "[outa]"]
-    : ["-map", "[outv]"];
-  const encodeArgs = anyAudio
-    ? ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-       "-c:a", "aac", "-ar", "44100", "-ac", "2"]
-    : ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-an"];
-
-  const exitCode = await ffmpeg.exec([
-    ...inputArgs,
-    "-filter_complex", filters.join(";"),
-    ...mapArgs,
-    ...encodeArgs,
+  const concatExit = await ffmpeg.exec([
+    "-f", "concat",
+    "-safe", "0",
+    "-i", "list.txt",
+    "-c", "copy",
+    "-reset_timestamps", "1",
+    "-movflags", "+faststart",
     "output.mp4",
   ]);
-
-  if (exitCode !== 0) {
-    throw new Error(`Encoding failed (exit ${exitCode})`);
-  }
-
+  if (concatExit !== 0) throw new Error("Concat failed");
   onProgress(95);
 
   const data = await ffmpeg.readFile("output.mp4");
   onProgress(100);
   onLog("Done ✓");
 
-  for (const n of [...names, "output.mp4"]) {
+  for (const n of [...names, ...readyNames, "list.txt", "output.mp4"]) {
     try { await ffmpeg.deleteFile(n); } catch {}
   }
 
