@@ -1,0 +1,434 @@
+/* ─── Globals ─────────────────────────────────── */
+.main {
+  min-height: 100vh;
+  background: #0a0a0a;
+  color: #e8e8e8;
+  font-family: "Courier New", Courier, monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 24px 60px;
+  gap: 36px;
+}
+
+/* ─── Header ──────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  max-width: 900px;
+}
+
+.logoMark {
+  width: 48px;
+  height: 48px;
+  background: #d4ff3a;
+  color: #000;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  margin: 0;
+  color: #fff;
+  line-height: 1;
+}
+
+.subtitle {
+  font-size: 10px;
+  color: #555;
+  letter-spacing: 0.08em;
+  margin: 4px 0 0;
+  text-transform: uppercase;
+}
+
+/* ─── Drop Section ────────────────────────────── */
+.dropSection {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  max-width: 900px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.slotWrapper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.dropZone {
+  width: 260px;
+  height: 200px;
+  border: 1px solid #222;
+  background: #111;
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.15s, background 0.15s;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.dropZone:hover:not(.disabled) {
+  border-color: #444;
+  background: #161616;
+}
+
+.dropZone.loaded {
+  border-color: #d4ff3a;
+}
+
+.dropZone.dragOver {
+  border-color: #d4ff3a;
+  background: #1a1e0a;
+}
+
+.dropZone.disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ─── Empty State ─────────────────────────────── */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 6px;
+  padding: 20px;
+  user-select: none;
+}
+
+.slotNumber {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-size: 10px;
+  color: #333;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+.dropIcon {
+  font-size: 28px;
+  color: #2a2a2a;
+  margin-bottom: 4px;
+}
+
+.dropText {
+  font-size: 11px;
+  color: #444;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dropHint {
+  font-size: 9px;
+  color: #2e2e2e;
+  margin: 0;
+  letter-spacing: 0.06em;
+}
+
+/* ─── Preview ─────────────────────────────────── */
+.preview {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.previewVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.previewOverlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0,0,0,0.85));
+  padding: 20px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fileName {
+  font-size: 10px;
+  color: #ccc;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fileSize {
+  font-size: 9px;
+  color: #555;
+}
+
+.clearBtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  background: rgba(0,0,0,0.75);
+  border: 1px solid #333;
+  color: #888;
+  font-size: 9px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.1s, border-color 0.1s;
+}
+
+.clearBtn:hover {
+  color: #ff4444;
+  border-color: #ff4444;
+}
+
+/* ─── Plus Divider ────────────────────────────── */
+.plusDivider {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e1e1e;
+  padding: 0 12px;
+  flex-shrink: 0;
+}
+
+/* ─── Controls ────────────────────────────────── */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 900px;
+  flex-wrap: wrap;
+}
+
+.stitchBtn {
+  background: #d4ff3a;
+  color: #000;
+  border: none;
+  padding: 12px 28px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.stitchBtn:hover:not(:disabled) {
+  background: #c0e832;
+}
+
+.stitchBtn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.stitchBtn:disabled {
+  background: #1e1e1e;
+  color: #444;
+  cursor: not-allowed;
+}
+
+.resetBtn {
+  background: transparent;
+  border: 1px solid #222;
+  color: #555;
+  padding: 12px 20px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.resetBtn:hover {
+  border-color: #444;
+  color: #888;
+}
+
+/* ─── Progress ────────────────────────────────── */
+.progressWrapper {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.progressTrack {
+  flex: 1;
+  height: 3px;
+  background: #1a1a1a;
+  overflow: hidden;
+}
+
+.progressBar {
+  height: 100%;
+  background: #d4ff3a;
+  transition: width 0.4s ease;
+}
+
+.progressLabel {
+  font-size: 11px;
+  color: #d4ff3a;
+  min-width: 38px;
+  text-align: right;
+  letter-spacing: 0.05em;
+}
+
+/* ─── Done / Error ────────────────────────────── */
+.doneControls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.downloadBtn {
+  background: #d4ff3a;
+  color: #000;
+  border: none;
+  padding: 12px 28px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.downloadBtn:hover {
+  background: #c0e832;
+}
+
+.errorControls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.errorBadge {
+  font-size: 11px;
+  color: #ff4444;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ─── Log ─────────────────────────────────────── */
+.logSection {
+  width: 100%;
+  max-width: 900px;
+  border: 1px solid #1a1a1a;
+}
+
+.logHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background: #111;
+  border-bottom: 1px solid #1a1a1a;
+  font-size: 9px;
+  color: #333;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.logCount {
+  color: #2a2a2a;
+}
+
+.logBody {
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 10px 0;
+  background: #080808;
+}
+
+.logBody::-webkit-scrollbar {
+  width: 4px;
+}
+
+.logBody::-webkit-scrollbar-thumb {
+  background: #222;
+}
+
+.logLine {
+  font-size: 10px;
+  color: #444;
+  padding: 2px 14px;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+}
+
+.logPrompt {
+  color: #2a2a2a;
+  margin-right: 6px;
+}
+
+.logError {
+  color: #ff4444 !important;
+}
+
+.logSuccess {
+  color: #7ec850 !important;
+}
+
+/* ─── Footer ──────────────────────────────────── */
+.footer {
+  font-size: 10px;
+  color: #2a2a2a;
+  letter-spacing: 0.06em;
+  display: flex;
+  gap: 10px;
+}
+
+.dot {
+  color: #1a1a1a;
+}
+
+/* ─── Responsive ──────────────────────────────── */
+@media (max-width: 680px) {
+  .dropSection {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .slotWrapper {
+    flex-direction: column;
+  }
+
+  .dropZone {
+    width: 100%;
+    height: 140px;
+  }
+
+  .plusDivider {
+    padding: 8px 0;
+    text-align: center;
+  }
+}
