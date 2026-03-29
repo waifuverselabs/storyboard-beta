@@ -230,5 +230,5 @@ export async function smartStitch({
     } catch {}
   }
 
-  return new Blob([data], { type: "video/mp4" });
+  return new Blob([new Uint8Array(data as Uint8Array)], { type: "video/mp4" });
 }
