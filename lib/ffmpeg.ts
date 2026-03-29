@@ -207,13 +207,29 @@ export async function smartStitch({
   const listContent = readyNames.map((n) => `file '${n}'`).join("\n");
   await ffmpeg.writeFile("list.txt", listContent);
 
-  const concatArgs = [
-    "-f", "concat",
-    "-safe", "0",
-    "-i", "list.txt",
-    "-c", "copy",
-    "output.mp4",
-  ];
+  const concatArgs = ref.hasAudio
+    ? [
+        "-f", "concat",
+        "-safe", "0",
+        "-i", "list.txt",
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "23",
+        "-c:a", "aac",
+        "-ar", "44100",
+        "-ac", "2",
+        "output.mp4",
+      ]
+    : [
+        "-f", "concat",
+        "-safe", "0",
+        "-i", "list.txt",
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "23",
+        "-an",
+        "output.mp4",
+      ];
 
   await ffmpeg.exec(concatArgs);
   onProgress(95);

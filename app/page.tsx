@@ -115,9 +115,9 @@ export default function Home() {
       <header className={styles.header}>
         <div className={styles.logoMark}>VS</div>
         <div>
-          <h1 className={styles.title}>VIDEO STITCHER</h1>
+          <h1 className={styles.title}>WAIFUVERSE STORYBOARD</h1>
           <p className={styles.subtitle}>
-            Client-side · Zero upload · ffmpeg.wasm
+            Client-side · Zero upload
           </p>
         </div>
       </header>

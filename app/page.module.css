@@ -86,12 +86,12 @@
 }
 
 .dropZone.loaded {
-  border-color: #d4ff3a;
+  border-color: #ff69b4;
 }
 
 .dropZone.dragOver {
-  border-color: #d4ff3a;
-  background: #1a1e0a;
+  border-color: #ff69b4;
+  background: #1a0a12;
 }
 
 .dropZone.disabled {
