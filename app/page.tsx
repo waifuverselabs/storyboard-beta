@@ -113,11 +113,11 @@ export default function Home() {
     <main className={styles.main}>
       {/* Header */}
       <header className={styles.header}>
-        <div className={styles.logoMark}>waifuverse</div>
         <div>
+          <div className={styles.logoMark}>waifuverse</div>
           <h1 className={styles.title}>STORYBOARD PROTOTYPE</h1>
           <p className={styles.subtitle}>
-            Client-side · Zero upload
+            🧪 waifuverse labs · Client-side · Zero upload
           </p>
         </div>
       </header>
