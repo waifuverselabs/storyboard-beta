@@ -23,11 +23,12 @@
 .logoMark {
   width: 48px;
   height: 48px;
-  background: #d4ff3a;
-  color: #000;
-  font-size: 15px;
+  background: #ff69b4;
+  color: #fff;
+  font-size: 14px;
   font-weight: 900;
-  letter-spacing: 0.05em;
+  font-family: "Arial Black", "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0.04em;
   display: flex;
   align-items: center;
   justify-content: center;

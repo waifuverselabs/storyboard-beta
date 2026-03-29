@@ -113,7 +113,7 @@ export default function Home() {
     <main className={styles.main}>
       {/* Header */}
       <header className={styles.header}>
-        <div className={styles.logoMark}>VS</div>
+        <div className={styles.logoMark}>WS</div>
         <div>
           <h1 className={styles.title}>WAIFUVERSE STORYBOARD</h1>
           <p className={styles.subtitle}>
@@ -248,7 +248,7 @@ export default function Home() {
               download="stitched.mp4"
               className={styles.downloadBtn}
             >
-              ↓ Download stitched.mp4
+              ↓ Download .mp4
             </a>
             <button className={styles.resetBtn} onClick={handleReset}>
               Start over

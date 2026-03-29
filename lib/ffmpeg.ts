@@ -95,18 +95,6 @@ export async function probeFile(
   };
 }
 
-function infosMatch(infos: VideoInfo[]): boolean {
-  const ref = infos[0];
-  return infos.every(
-    (i) =>
-      i.codec === ref.codec &&
-      i.width === ref.width &&
-      i.height === ref.height &&
-      i.fps === ref.fps &&
-      i.hasAudio === ref.hasAudio
-  );
-}
-
 export interface StitchOptions {
   files: File[];
   onLog: (msg: string) => void;
@@ -122,7 +110,6 @@ export async function smartStitch({
   const ffmpeg = await getFFmpeg(onLog);
   onProgress(5);
 
-  // Write all input files to the virtual FS
   onLog("Writing files to memory…");
   const names: string[] = [];
   for (let i = 0; i < files.length; i++) {
@@ -132,7 +119,6 @@ export async function smartStitch({
     onProgress(5 + (i + 1) * 5);
   }
 
-  // Probe each file
   onLog("Probing video streams…");
   const infos: VideoInfo[] = [];
   for (let i = 0; i < names.length; i++) {
@@ -145,105 +131,73 @@ export async function smartStitch({
   onProgress(30);
 
   const ref = infos[0];
-  const match = infosMatch(infos);
+  const anyAudio = infos.some((v) => v.hasAudio);
 
-  let readyNames: string[] = [...names];
+  // Single-pass filter_complex: normalize all inputs then concat.
+  // Avoids intermediate files and the corrupt-NAL issues that come from
+  // encoding a file twice (normalize pass → concat pass).
+  onLog(`Concatenating ${names.length} videos…`);
 
-  if (!match) {
-    onLog(
-      `Format mismatch — normalizing to ${ref.width}×${ref.height} @ ${ref.fps}fps…`
+  const inputArgs = names.flatMap((n) => ["-i", n]);
+  const filters: string[] = [];
+
+  for (let i = 0; i < names.length; i++) {
+    // Scale to ref dims (letterbox if needed), normalize fps, reset PTS
+    filters.push(
+      `[${i}:v]` +
+        `scale=${ref.width}:${ref.height}:force_original_aspect_ratio=decrease,` +
+        `pad=${ref.width}:${ref.height}:(ow-iw)/2:(oh-ih)/2,` +
+        `fps=${ref.fps},setpts=PTS-STARTPTS[nv${i}]`
     );
-
-    readyNames = [];
-    for (let i = 0; i < names.length; i++) {
-      const info = infos[i];
-      const needsRecode =
-        info.width !== ref.width ||
-        info.height !== ref.height ||
-        info.fps !== ref.fps ||
-        (!info.hasAudio && ref.hasAudio);
-
-      if (!needsRecode) {
-        onLog(`Video ${i + 1}: OK, no re-encode needed`);
-        readyNames.push(names[i]);
+    if (anyAudio) {
+      if (infos[i].hasAudio) {
+        // Normalize to stereo 44100 and reset PTS
+        filters.push(
+          `[${i}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,asetpts=PTS-STARTPTS[na${i}]`
+        );
       } else {
-        const outName = `norm_${i}.mp4`;
-        onLog(`Video ${i + 1}: Re-encoding…`);
-
-        const filterArgs = ref.hasAudio
-          ? [
-              "-i", names[i],
-              "-vf", `scale=${ref.width}:${ref.height},fps=${ref.fps}`,
-              "-c:v", "libx264",
-              "-preset", "veryfast",
-              "-crf", "23",
-              "-c:a", "aac",
-              "-ar", "44100",
-              "-ac", "2",
-              outName,
-            ]
-          : [
-              "-i", names[i],
-              "-vf", `scale=${ref.width}:${ref.height},fps=${ref.fps}`,
-              "-c:v", "libx264",
-              "-preset", "veryfast",
-              "-crf", "23",
-              "-an",
-              outName,
-            ];
-
-        await ffmpeg.exec(filterArgs);
-        onLog(`Video ${i + 1}: Done ✓`);
-        readyNames.push(outName);
+        // Generate silence for video-only clips
+        filters.push(`anullsrc=channel_layout=stereo:sample_rate=44100[na${i}]`);
       }
-      onProgress(30 + ((i + 1) / names.length) * 35);
     }
-  } else {
-    onLog("All formats match ✓");
   }
 
-  // Write concat list
-  onLog("Concatenating…");
-  const listContent = readyNames.map((n) => `file '${n}'`).join("\n");
-  await ffmpeg.writeFile("list.txt", listContent);
+  const vIn = names.map((_, i) => `[nv${i}]`).join("");
+  const aIn = anyAudio ? names.map((_, i) => `[na${i}]`).join("") : "";
+  filters.push(
+    anyAudio
+      ? `${vIn}${aIn}concat=n=${names.length}:v=1:a=1[outv][outa]`
+      : `${vIn}concat=n=${names.length}:v=1:a=0[outv]`
+  );
 
-  const concatArgs = ref.hasAudio
-    ? [
-        "-f", "concat",
-        "-safe", "0",
-        "-i", "list.txt",
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-ar", "44100",
-        "-ac", "2",
-        "output.mp4",
-      ]
-    : [
-        "-f", "concat",
-        "-safe", "0",
-        "-i", "list.txt",
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "23",
-        "-an",
-        "output.mp4",
-      ];
+  const mapArgs = anyAudio
+    ? ["-map", "[outv]", "-map", "[outa]"]
+    : ["-map", "[outv]"];
+  const encodeArgs = anyAudio
+    ? ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+       "-c:a", "aac", "-ar", "44100", "-ac", "2"]
+    : ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-an"];
 
-  await ffmpeg.exec(concatArgs);
+  const exitCode = await ffmpeg.exec([
+    ...inputArgs,
+    "-filter_complex", filters.join(";"),
+    ...mapArgs,
+    ...encodeArgs,
+    "output.mp4",
+  ]);
+
+  if (exitCode !== 0) {
+    throw new Error(`Encoding failed (exit ${exitCode})`);
+  }
+
   onProgress(95);
 
-  // Read result
   const data = await ffmpeg.readFile("output.mp4");
   onProgress(100);
   onLog("Done ✓");
 
-  // Cleanup virtual FS
-  for (const n of [...names, ...readyNames, "list.txt", "output.mp4"]) {
-    try {
-      await ffmpeg.deleteFile(n);
-    } catch {}
+  for (const n of [...names, "output.mp4"]) {
+    try { await ffmpeg.deleteFile(n); } catch {}
   }
 
   return new Blob([new Uint8Array(data as Uint8Array)], { type: "video/mp4" });
