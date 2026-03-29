@@ -21,18 +21,17 @@
 }
 
 .logoMark {
-  width: 48px;
-  height: 48px;
-  background: #ff1493;
-  color: #fff;
-  font-size: 14px;
+  font-size: 20px;
   font-weight: 900;
   font-family: "Arial Black", "Helvetica Neue", Arial, sans-serif;
-  letter-spacing: 0.04em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #ff1493 0%, #bf00ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   flex-shrink: 0;
+  line-height: 1;
 }
 
 .title {

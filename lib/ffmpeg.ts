@@ -95,6 +95,21 @@ export async function probeFile(
   };
 }
 
+// Cap the long edge to keep ffmpeg.wasm within its WASM heap limit.
+// A 2784×4096 frame is ~43 MB of YUV data per buffer; with B-frame lookahead
+// ffmpeg holds several at once and crashes. 1280px long edge is safe.
+const MAX_LONG_EDGE = 1280;
+
+function clampRes(w: number, h: number): { w: number; h: number } {
+  const longest = Math.max(w, h);
+  if (longest <= MAX_LONG_EDGE) return { w, h };
+  const ratio = MAX_LONG_EDGE / longest;
+  return {
+    w: Math.round((w * ratio) / 2) * 2,
+    h: Math.round((h * ratio) / 2) * 2,
+  };
+}
+
 export interface StitchOptions {
   files: File[];
   onLog: (msg: string) => void;
@@ -133,6 +148,11 @@ export async function smartStitch({
   const ref = infos[0];
   const anyAudio = infos.some((v) => v.hasAudio);
 
+  const { w: outW, h: outH } = clampRes(ref.width, ref.height);
+  if (outW !== ref.width || outH !== ref.height) {
+    onLog(`Scaling output down to ${outW}×${outH} (source ${ref.width}×${ref.height} exceeds safe limit)`);
+  }
+
   // Single-pass filter_complex: normalize all inputs then concat.
   // Avoids intermediate files and the corrupt-NAL issues that come from
   // encoding a file twice (normalize pass → concat pass).
@@ -142,11 +162,11 @@ export async function smartStitch({
   const filters: string[] = [];
 
   for (let i = 0; i < names.length; i++) {
-    // Scale to ref dims (letterbox if needed), normalize fps, reset PTS
+    // Scale to output dims (letterbox if needed), normalize fps, reset PTS
     filters.push(
       `[${i}:v]` +
-        `scale=${ref.width}:${ref.height}:force_original_aspect_ratio=decrease,` +
-        `pad=${ref.width}:${ref.height}:(ow-iw)/2:(oh-ih)/2,` +
+        `scale=${outW}:${outH}:force_original_aspect_ratio=decrease,` +
+        `pad=${outW}:${outH}:(ow-iw)/2:(oh-ih)/2,` +
         `fps=${ref.fps},setpts=PTS-STARTPTS[nv${i}]`
     );
     if (anyAudio) {

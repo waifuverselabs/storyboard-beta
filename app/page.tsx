@@ -113,9 +113,9 @@ export default function Home() {
     <main className={styles.main}>
       {/* Header */}
       <header className={styles.header}>
-        <div className={styles.logoMark}>WS</div>
+        <div className={styles.logoMark}>waifuverse</div>
         <div>
-          <h1 className={styles.title}>WAIFUVERSE STORYBOARD</h1>
+          <h1 className={styles.title}>STORYBOARD PROTOTYPE</h1>
           <p className={styles.subtitle}>
             Client-side · Zero upload
           </p>

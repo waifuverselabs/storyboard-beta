@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Video Stitcher",
-  description:
-    "Drag, drop, and stitch videos together — all in your browser. No uploads.",
+  title: "Storyboard Prototype",
+  description: "Waifuverse storyboard tool — drag, drop, and stitch videos in your browser. No uploads.",
 };
 
 export default function RootLayout({
