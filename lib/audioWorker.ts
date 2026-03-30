@@ -32,16 +32,17 @@ async function getOrLoadPipeline(
   if (!model) throw new Error(`Unknown model: ${modelId}`);
 
   // Dynamic import inside the worker — webpack bundles this correctly
-  const { pipeline, env } = await import("@xenova/transformers");
+  const { pipeline, env } = await import("@huggingface/transformers");
 
   env.allowLocalModels = false;
   // Run ONNX directly on this worker thread — no sub-worker needed
-  env.backends.onnx.wasm.proxy = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (env as any).backends.onnx.wasm.proxy = false;
 
   postPhase({ state: "downloading", file: "model config", pct: 0 });
 
   const instance = await pipeline(model.pipeline, model.hfModelId, {
-    quantized: model.quantized !== false,
+    dtype: model.quantized === false ? "fp32" : "q8",
     progress_callback: (info: { status: string; file?: string; progress?: number }) => {
       if (info.status === "progress" || info.status === "downloading") {
         postPhase({
@@ -154,7 +155,7 @@ self.onmessage = async (e: MessageEvent) => {
       if (model.speakerEmbeddingUrl) {
         const resp = await fetch(model.speakerEmbeddingUrl);
         const buf = await resp.arrayBuffer();
-        const { Tensor } = await import("@xenova/transformers");
+        const { Tensor } = await import("@huggingface/transformers");
         const data = new Float32Array(buf);
         opts.speaker_embeddings = new Tensor("float32", data, [1, data.length]);
       }

@@ -50,29 +50,6 @@ export const AUDIO_MODELS: AudioModel[] = [
       "Acoustic guitar fingerpicking, warm and nostalgic",
     ],
   },
-  {
-    id: "musicgen-stereo-small",
-    name: "MusicGen Stereo",
-    tag: "MUSIC",
-    description: "Stereo music generation. Same speed as Small, richer sound.",
-    size: "~200 MB",
-    task: "music",
-    hfModelId: "Xenova/musicgen-stereo-small",
-    pipeline: "text-to-audio",
-    sampleRate: 32000,
-    tokensPerSecond: 50,
-    maxDurationSeconds: 30,
-    color: "#7c3aed",
-    prompts: [
-      "Lush cinematic score, wide stereo strings, epic",
-      "Deep house music, punchy bass, club-ready",
-      "Dreamy synthwave, rich pads, nostalgic 80s vibe",
-      "Orchestral adventure theme, sweeping and heroic",
-      "Minimal techno, hypnotic beat, dark and atmospheric",
-      "Jazz trio, warm piano, upright bass, brushed drums",
-    ],
-  },
-
   // ── Text-to-speech ───────────────────────────────────────────────────────
   {
     id: "speecht5-tts",

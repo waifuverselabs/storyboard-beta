@@ -1,4 +1,7 @@
 /** @type {import('next').NextConfig} */
+const path = require("path");
+const webpack = require("webpack");
+
 const nextConfig = {
   // Required for ffmpeg.wasm SharedArrayBuffer support
   async headers() {
@@ -14,13 +17,27 @@ const nextConfig = {
   },
 
   webpack: (config) => {
-    // Stub out server-only / native packages that @xenova/transformers
-    // optionally depends on — they are not needed in the browser.
+    // Stub server-only / native packages
     config.resolve.alias = {
       ...config.resolve.alias,
+      // Point @huggingface/transformers at the browser-only bundle
+      "@huggingface/transformers": path.resolve(
+        __dirname,
+        "node_modules/@huggingface/transformers/dist/transformers.web.js"
+      ),
       "onnxruntime-node$": false,
       "sharp$": false,
     };
+
+    // The ort WebGPU bundle uses `import.meta` which Terser can't minify.
+    // Replace it with an empty stub — we only use the WASM backend.
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /ort\.webgpu\.bundle\.min\.mjs$/,
+        path.resolve(__dirname, "lib/stub.js")
+      )
+    );
+
     // Enable async WebAssembly (used by onnxruntime-web WASM backend)
     config.experiments = {
       ...config.experiments,
