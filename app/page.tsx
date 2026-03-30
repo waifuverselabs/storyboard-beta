@@ -1,306 +1,494 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { smartStitch } from "@/lib/ffmpeg";
-import styles from "./page.module.css";
+import "./editor.css";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type {
+  MediaItem,
+  TimelineClip,
+  Track,
+  ExportPhase,
+  LogEntry,
+  MediaKind,
+} from "@/lib/types";
+import {
+  generateId,
+  loadMediaDuration,
+  loadVideoDimensions,
+  captureThumbnail,
+  formatTime,
+} from "@/lib/mediaUtils";
+import { exportTimeline } from "@/lib/ffmpeg";
 
-type SlotState = "empty" | "loaded" | "processing";
+import Toolbar from "@/components/Toolbar";
+import MediaBin from "@/components/MediaBin";
+import Preview from "@/components/Preview";
+import Timeline from "@/components/Timeline";
+import PropertiesPanel from "@/components/PropertiesPanel";
+import LogFooter from "@/components/LogFooter";
 
-interface VideoSlot {
-  file: File | null;
-  state: SlotState;
-  preview: string | null;
+// ── Default tracks ─────────────────────────────────────────────────────────
+
+const DEFAULT_TRACKS: Track[] = [
+  { id: "v1", kind: "video", label: "V1", muted: false, locked: false, height: 76 },
+  { id: "a1", kind: "audio", label: "A1", muted: false, locked: false, height: 52 },
+];
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function makeLog(msg: string, kind: LogEntry["kind"] = "info"): LogEntry {
+  const now = new Date();
+  const time = `${now.getHours().toString().padStart(2, "0")}:${now
+    .getMinutes()
+    .toString()
+    .padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}`;
+  return { id: Date.now() + Math.random(), time, msg, kind };
 }
 
-const EMPTY_SLOT: VideoSlot = { file: null, state: "empty", preview: null };
+function getDefaultTrack(tracks: Track[], kind: MediaKind): Track | undefined {
+  return tracks.find((t) => t.kind === kind);
+}
 
-export default function Home() {
-  const [slots, setSlots] = useState<VideoSlot[]>([
-    { ...EMPTY_SLOT },
-    { ...EMPTY_SLOT },
-    { ...EMPTY_SLOT },
-  ]);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [progress, setProgress] = useState(0);
-  const [phase, setPhase] = useState<"idle" | "working" | "done" | "error">("idle");
-  const [outputUrl, setOutputUrl] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState<number | null>(null);
-  const logEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+function getTrackEndTime(clips: TimelineClip[], trackId: string): number {
+  return clips
+    .filter((c) => c.trackId === trackId)
+    .reduce((max, c) => Math.max(max, c.startTime + c.duration), 0);
+}
 
-  const addLog = useCallback((msg: string) => {
-    setLogs((prev) => [...prev.slice(-80), msg]);
-    setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+// ── Page ───────────────────────────────────────────────────────────────────
+
+export default function EditorPage() {
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [tracks, setTracks] = useState<Track[]>(DEFAULT_TRACKS);
+  const [clips, setClips] = useState<TimelineClip[]>([]);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+
+  // Playback
+  const [playhead, setPlayhead] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume] = useState(0.8);
+
+  // Editor
+  const [zoom, setZoom] = useState(80); // px/sec
+
+  // Export
+  const [exportPhase, setExportPhase] = useState<ExportPhase>("idle");
+  const [exportProgress, setExportProgress] = useState(0);
+  const [exportUrl, setExportUrl] = useState<string | null>(null);
+
+  // Logs
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+
+  // Drag tracking
+  const [draggingMediaId, setDraggingMediaId] = useState<string | null>(null);
+
+  // Global drop zone
+  const [globalDragOver, setGlobalDragOver] = useState(false);
+
+  const addLog = useCallback((msg: string, kind: LogEntry["kind"] = "info") => {
+    setLogs((prev) => [...prev.slice(-199), makeLog(msg, kind)]);
   }, []);
 
-  const setSlotFile = (index: number, file: File) => {
-    const preview = URL.createObjectURL(file);
-    setSlots((prev) =>
-      prev.map((s, i) => (i === index ? { file, state: "loaded", preview } : s))
+  // ── Total duration ───────────────────────────────────────────────────────
+
+  const totalDuration = clips.reduce(
+    (max, c) => Math.max(max, c.startTime + c.duration),
+    0
+  );
+
+  // ── Import media ─────────────────────────────────────────────────────────
+
+  const importFiles = useCallback(
+    async (fileList: FileList) => {
+      const files = Array.from(fileList);
+      for (const file of files) {
+        const isVideo = file.type.startsWith("video/");
+        const isAudio = file.type.startsWith("audio/");
+        if (!isVideo && !isAudio) {
+          addLog(`Skipped ${file.name} — not a video or audio file`, "warn");
+          continue;
+        }
+
+        addLog(`Importing ${file.name}…`);
+        const url = URL.createObjectURL(file);
+        const kind: MediaKind = isVideo ? "video" : "audio";
+        const duration = await loadMediaDuration(url, kind);
+        const { w, h } = isVideo
+          ? await loadVideoDimensions(url)
+          : { w: 0, h: 0 };
+        const thumbnail = isVideo ? await captureThumbnail(url) : null;
+
+        const item: MediaItem = {
+          id: generateId(),
+          name: file.name,
+          file,
+          url,
+          kind,
+          duration,
+          width: w,
+          height: h,
+          thumbnail,
+        };
+
+        setMediaItems((prev) => [...prev, item]);
+        addLog(`✓ ${file.name} (${duration.toFixed(1)}s)`, "success");
+      }
+    },
+    [addLog]
+  );
+
+  // ── Add clip to timeline ──────────────────────────────────────────────────
+
+  const addClipToTimeline = useCallback(
+    (item: MediaItem, trackId?: string, startTime?: number) => {
+      const targetTrack = trackId
+        ? tracks.find((t) => t.id === trackId)
+        : getDefaultTrack(tracks, item.kind);
+
+      if (!targetTrack) {
+        addLog(`No ${item.kind} track found. Add a track first.`, "warn");
+        return;
+      }
+
+      // Check if media kind matches track kind
+      if (item.kind !== targetTrack.kind) {
+        // Try to find a matching track
+        const fallback = getDefaultTrack(tracks, item.kind);
+        if (!fallback) {
+          addLog(`Can't place ${item.kind} on ${targetTrack.kind} track`, "warn");
+          return;
+        }
+      }
+
+      const resolvedTrack =
+        item.kind === targetTrack.kind
+          ? targetTrack
+          : getDefaultTrack(tracks, item.kind) ?? targetTrack;
+
+      const clipStart =
+        startTime !== undefined
+          ? startTime
+          : getTrackEndTime(clips, resolvedTrack.id);
+
+      const clip: TimelineClip = {
+        id: generateId(),
+        mediaId: item.id,
+        trackId: resolvedTrack.id,
+        startTime: clipStart,
+        duration: item.duration,
+        trimStart: 0,
+        trimEnd: item.duration,
+        volume: 1,
+        speed: 1,
+        posX: 0,
+        posY: 0,
+        scale: 1,
+        opacity: 1,
+      };
+
+      setClips((prev) => [...prev, clip]);
+      addLog(`Added "${item.name}" to ${resolvedTrack.label} at ${clipStart.toFixed(1)}s`);
+    },
+    [tracks, clips, addLog]
+  );
+
+  // ── Update / delete clip ──────────────────────────────────────────────────
+
+  const updateClip = useCallback(
+    (id: string, patch: Partial<TimelineClip>) => {
+      setClips((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, ...patch } : c))
+      );
+    },
+    []
+  );
+
+  const deleteClip = useCallback((id: string) => {
+    setClips((prev) => prev.filter((c) => c.id !== id));
+    setSelectedClipId((prev) => (prev === id ? null : prev));
+    addLog("Clip removed");
+  }, [addLog]);
+
+  // ── Tracks ────────────────────────────────────────────────────────────────
+
+  const addTrack = useCallback(
+    (kind: "video" | "audio") => {
+      const existing = tracks.filter((t) => t.kind === kind);
+      const num = existing.length + 1;
+      const prefix = kind === "video" ? "V" : "A";
+      setTracks((prev) => [
+        ...prev,
+        {
+          id: generateId(),
+          kind,
+          label: `${prefix}${num}`,
+          muted: false,
+          locked: false,
+          height: kind === "video" ? 76 : 52,
+        },
+      ]);
+    },
+    [tracks]
+  );
+
+  const toggleMute = useCallback((trackId: string) => {
+    setTracks((prev) =>
+      prev.map((t) => (t.id === trackId ? { ...t, muted: !t.muted } : t))
     );
-  };
+  }, []);
 
-  const clearSlot = (index: number) => {
-    setSlots((prev) => {
-      const old = prev[index];
-      if (old.preview) URL.revokeObjectURL(old.preview);
-      return prev.map((s, i) => (i === index ? { ...EMPTY_SLOT } : s));
+  // ── Drop on timeline ──────────────────────────────────────────────────────
+
+  const handleDropMedia = useCallback(
+    (mediaId: string, trackId: string, startTime: number) => {
+      const item = mediaItems.find((m) => m.id === mediaId);
+      if (!item) return;
+      addClipToTimeline(item, trackId, startTime);
+    },
+    [mediaItems, addClipToTimeline]
+  );
+
+  // ── Playback ──────────────────────────────────────────────────────────────
+
+  const togglePlay = useCallback(() => {
+    setIsPlaying((p) => {
+      if (!p && playhead >= totalDuration && totalDuration > 0) {
+        setPlayhead(0);
+      }
+      return !p;
     });
-  };
+  }, [playhead, totalDuration]);
 
-  const handleDrop = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    setDragOver(null);
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith("video/")) {
-      setSlotFile(index, file);
+  // Spacebar to play/pause
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (
+        e.code === "Space" &&
+        !(e.target instanceof HTMLInputElement) &&
+        !(e.target instanceof HTMLTextAreaElement)
+      ) {
+        e.preventDefault();
+        togglePlay();
+      }
+      if (e.code === "Delete" || e.code === "Backspace") {
+        if (selectedClipId && !(e.target instanceof HTMLInputElement)) {
+          deleteClip(selectedClipId);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [togglePlay, selectedClipId, deleteClip]);
+
+  // ── Zoom ──────────────────────────────────────────────────────────────────
+
+  const zoomIn = () => setZoom((z) => Math.min(z * 1.4, 800));
+  const zoomOut = () => setZoom((z) => Math.max(z / 1.4, 10));
+
+  // Ctrl+scroll to zoom timeline
+  useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        setZoom((z) =>
+          e.deltaY < 0
+            ? Math.min(z * 1.1, 800)
+            : Math.max(z / 1.1, 10)
+        );
+      }
+    };
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => window.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // ── Export ────────────────────────────────────────────────────────────────
+
+  const handleExport = useCallback(async () => {
+    if (clips.length === 0) {
+      addLog("No clips to export.", "warn");
+      return;
     }
-  };
+    if (exportPhase === "exporting") return;
 
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
-    const file = e.target.files?.[0];
-    if (file) setSlotFile(index, file);
-    e.target.value = "";
-  };
-
-  const filledCount = slots.filter((s) => s.file).length;
-  const canStitch = filledCount >= 2 && phase === "idle";
-
-  const handleStitch = async () => {
-    const files = slots.filter((s) => s.file).map((s) => s.file!);
-    if (files.length < 2) return;
-
-    setPhase("working");
-    setProgress(0);
-    setLogs([]);
-    setOutputUrl(null);
+    if (exportUrl) URL.revokeObjectURL(exportUrl);
+    setExportUrl(null);
+    setExportPhase("exporting");
+    setExportProgress(0);
+    addLog("Starting export…");
 
     try {
-      const blob = await smartStitch({
-        files,
-        onLog: addLog,
-        onProgress: setProgress,
+      const blob = await exportTimeline({
+        clips,
+        tracks,
+        mediaItems,
+        onLog: (msg) => addLog(msg),
+        onProgress: (pct) => setExportProgress(pct),
       });
 
       const url = URL.createObjectURL(blob);
-      setOutputUrl(url);
-      setPhase("done");
-    } catch (err: unknown) {
+      setExportUrl(url);
+      setExportPhase("done");
+      addLog(`Export complete — ${(blob.size / 1024 / 1024).toFixed(1)} MB`, "success");
+    } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      addLog(`Error: ${msg}`);
-      setPhase("error");
+      addLog(`Export failed: ${msg}`, "error");
+      setExportPhase("error");
     }
-  };
+  }, [clips, tracks, mediaItems, exportUrl, exportPhase, addLog]);
 
-  const handleReset = () => {
-    slots.forEach((s) => {
-      if (s.preview) URL.revokeObjectURL(s.preview);
-    });
-    if (outputUrl) URL.revokeObjectURL(outputUrl);
-    setSlots([{ ...EMPTY_SLOT }, { ...EMPTY_SLOT }, { ...EMPTY_SLOT }]);
+  // ── Clear all ─────────────────────────────────────────────────────────────
+
+  const clearAll = useCallback(() => {
+    mediaItems.forEach((m) => URL.revokeObjectURL(m.url));
+    if (exportUrl) URL.revokeObjectURL(exportUrl);
+    setMediaItems([]);
+    setClips([]);
+    setTracks(DEFAULT_TRACKS);
+    setSelectedClipId(null);
+    setPlayhead(0);
+    setIsPlaying(false);
+    setExportPhase("idle");
+    setExportProgress(0);
+    setExportUrl(null);
     setLogs([]);
-    setProgress(0);
-    setPhase("idle");
-    setOutputUrl(null);
-  };
+    addLog("Cleared all. Ready for new project.");
+  }, [mediaItems, exportUrl, addLog]);
 
-  const formatBytes = (bytes: number) => {
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
+  // ── Global drag-over (file drop) ──────────────────────────────────────────
+
+  useEffect(() => {
+    const over = (e: DragEvent) => {
+      // Only show overlay if dragging files from OS, not internal clips
+      if (e.dataTransfer?.types.includes("Files")) {
+        e.preventDefault();
+        setGlobalDragOver(true);
+      }
+    };
+    const leave = (e: DragEvent) => {
+      if (!e.relatedTarget) setGlobalDragOver(false);
+    };
+    const drop = (e: DragEvent) => {
+      setGlobalDragOver(false);
+      if (e.dataTransfer?.files.length) {
+        e.preventDefault();
+        importFiles(e.dataTransfer.files);
+      }
+    };
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+    };
+  }, [importFiles]);
+
+  // ── Remove media item from bin ─────────────────────────────────────────────
+
+  const removeMediaItem = useCallback(
+    (id: string) => {
+      const item = mediaItems.find((m) => m.id === id);
+      if (item) URL.revokeObjectURL(item.url);
+      setMediaItems((prev) => prev.filter((m) => m.id !== id));
+      // Remove clips using this media
+      setClips((prev) => {
+        const removed = prev.filter((c) => c.mediaId === id);
+        if (selectedClipId && removed.find((c) => c.id === selectedClipId)) {
+          setSelectedClipId(null);
+        }
+        return prev.filter((c) => c.mediaId !== id);
+      });
+    },
+    [mediaItems, selectedClipId]
+  );
+
+  const selectedClip = clips.find((c) => c.id === selectedClipId) ?? null;
 
   return (
-    <main className={styles.main}>
-      {/* Header */}
-      <header className={styles.header}>
-        <div>
-          <div className={styles.logoMark}>waifuverse</div>
-          <h1 className={styles.title}>STORYBOARD PROTOTYPE</h1>
-          <p className={styles.subtitle}>
-            🧪 waifuverse labs · Client-side · Zero upload
-          </p>
+    <div className="editor">
+      {/* Global drop overlay */}
+      {globalDragOver && (
+        <div className="global-drop-overlay">
+          <div className="global-drop-overlay-text">Drop files to import</div>
         </div>
-      </header>
-
-      {/* Drop zones */}
-      <section className={styles.dropSection}>
-        {slots.map((slot, i) => (
-          <div key={i} className={styles.slotWrapper}>
-            <div
-              className={[
-                styles.dropZone,
-                slot.state === "loaded" ? styles.loaded : "",
-                dragOver === i ? styles.dragOver : "",
-                phase === "working" ? styles.disabled : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(i);
-              }}
-              onDragLeave={() => setDragOver(null)}
-              onDrop={(e) => handleDrop(e, i)}
-              onClick={() =>
-                phase === "idle" && fileInputRefs.current[i]?.click()
-              }
-            >
-              <input
-                type="file"
-                accept="video/*"
-                ref={(el) => { fileInputRefs.current[i] = el; }}
-                onChange={(e) => handleFileInput(e, i)}
-                style={{ display: "none" }}
-              />
-
-              {slot.preview ? (
-                <div className={styles.preview}>
-                  <video
-                    src={slot.preview}
-                    className={styles.previewVideo}
-                    muted
-                    playsInline
-                    onMouseEnter={(e) =>
-                      (e.target as HTMLVideoElement).play()
-                    }
-                    onMouseLeave={(e) => {
-                      const v = e.target as HTMLVideoElement;
-                      v.pause();
-                      v.currentTime = 0;
-                    }}
-                  />
-                  <div className={styles.previewOverlay}>
-                    <span className={styles.fileName}>
-                      {slot.file!.name.length > 20
-                        ? slot.file!.name.slice(0, 18) + "…"
-                        : slot.file!.name}
-                    </span>
-                    <span className={styles.fileSize}>
-                      {formatBytes(slot.file!.size)}
-                    </span>
-                  </div>
-                  {phase === "idle" && (
-                    <button
-                      className={styles.clearBtn}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        clearSlot(i);
-                      }}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className={styles.emptyState}>
-                  <div className={styles.slotNumber}>{i + 1}</div>
-                  <div className={styles.dropIcon}>⬇</div>
-                  <p className={styles.dropText}>Drop video or click</p>
-                  <p className={styles.dropHint}>mp4 · mov · webm · mkv</p>
-                </div>
-              )}
-            </div>
-
-            {i < slots.length - 1 && (
-              <div className={styles.plusDivider}>+</div>
-            )}
-          </div>
-        ))}
-      </section>
-
-      {/* Controls */}
-      <section className={styles.controls}>
-        {phase === "idle" && (
-          <>
-            <button
-              className={styles.stitchBtn}
-              disabled={!canStitch}
-              onClick={handleStitch}
-            >
-              {filledCount < 2
-                ? `Add ${2 - filledCount} more video${2 - filledCount > 1 ? "s" : ""}`
-                : `Stitch ${filledCount} videos →`}
-            </button>
-            {filledCount > 0 && (
-              <button className={styles.resetBtn} onClick={handleReset}>
-                Clear all
-              </button>
-            )}
-          </>
-        )}
-
-        {phase === "working" && (
-          <div className={styles.progressWrapper}>
-            <div className={styles.progressTrack}>
-              <div
-                className={styles.progressBar}
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <span className={styles.progressLabel}>{progress}%</span>
-          </div>
-        )}
-
-        {phase === "done" && outputUrl && (
-          <div className={styles.doneControls}>
-            <a
-              href={outputUrl}
-              download="stitched.mp4"
-              className={styles.downloadBtn}
-            >
-              ↓ Download .mp4
-            </a>
-            <button className={styles.resetBtn} onClick={handleReset}>
-              Start over
-            </button>
-          </div>
-        )}
-
-        {phase === "error" && (
-          <div className={styles.errorControls}>
-            <span className={styles.errorBadge}>✕ Failed</span>
-            <button className={styles.resetBtn} onClick={handleReset}>
-              Try again
-            </button>
-          </div>
-        )}
-      </section>
-
-      {/* Log */}
-      {logs.length > 0 && (
-        <section className={styles.logSection}>
-          <div className={styles.logHeader}>
-            <span>LOG</span>
-            <span className={styles.logCount}>{logs.length} lines</span>
-          </div>
-          <div className={styles.logBody}>
-            {logs.map((line, i) => (
-              <div
-                key={i}
-                className={[
-                  styles.logLine,
-                  line.includes("Error") || line.includes("error")
-                    ? styles.logError
-                    : "",
-                  line.includes("✓") ? styles.logSuccess : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-              >
-                <span className={styles.logPrompt}>›</span> {line}
-              </div>
-            ))}
-            <div ref={logEndRef} />
-          </div>
-        </section>
       )}
 
-      {/* Footer */}
-      <footer className={styles.footer}>
-        <span>All processing happens in your browser.</span>
-        <span className={styles.dot}>·</span>
-        <span>No files are uploaded anywhere.</span>
-      </footer>
-    </main>
+      {/* Toolbar */}
+      <Toolbar
+        onImport={importFiles}
+        onExport={handleExport}
+        onClearAll={clearAll}
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+        zoom={zoom}
+        exportPhase={exportPhase}
+        exportProgress={exportProgress}
+        exportUrl={exportUrl}
+        hasClips={clips.length > 0}
+      />
+
+      {/* Main workspace */}
+      <div className="workspace">
+        {/* Left: Media Bin */}
+        <MediaBin
+          items={mediaItems}
+          onAddToTimeline={addClipToTimeline}
+          onRemove={removeMediaItem}
+          onImport={importFiles}
+          draggingMediaId={draggingMediaId}
+          onDragStart={setDraggingMediaId}
+          onDragEnd={() => setDraggingMediaId(null)}
+        />
+
+        {/* Center: Preview + Timeline */}
+        <div className="center-col">
+          <Preview
+            clips={clips}
+            tracks={tracks}
+            mediaItems={mediaItems}
+            playhead={playhead}
+            totalDuration={totalDuration}
+            isPlaying={isPlaying}
+            volume={volume}
+            onPlayheadChange={setPlayhead}
+            onPlayToggle={togglePlay}
+            onVolumeChange={setVolume}
+            onDurationUpdate={() => {}}
+          />
+
+          <Timeline
+            clips={clips}
+            tracks={tracks}
+            mediaItems={mediaItems}
+            playhead={playhead}
+            zoom={zoom}
+            selectedClipId={selectedClipId}
+            onSeek={(t) => { setPlayhead(t); setIsPlaying(false); }}
+            onSelectClip={setSelectedClipId}
+            onUpdateClip={updateClip}
+            onDeleteClip={deleteClip}
+            onDropMedia={handleDropMedia}
+            onAddTrack={addTrack}
+            onToggleMute={toggleMute}
+          />
+        </div>
+
+        {/* Right: Properties */}
+        <PropertiesPanel
+          selectedClip={selectedClip}
+          mediaItems={mediaItems}
+          tracks={tracks}
+          onUpdateClip={updateClip}
+          onDeleteClip={deleteClip}
+        />
+      </div>
+
+      {/* Footer: Log */}
+      <LogFooter
+        logs={logs}
+        exportPhase={exportPhase}
+        onClear={() => setLogs([])}
+      />
+    </div>
   );
 }
