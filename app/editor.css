@@ -343,7 +343,7 @@
 }
 
 .preview-play-btn {
-  background: #8b5cf6;
+  background: #ec4899;
   color: #fff;
   width: 30px;
   height: 30px;
@@ -355,8 +355,8 @@
   flex-shrink: 0;
   transition: background 0.15s;
 }
-.preview-play-btn:hover { background: #7c3aed; }
-.preview-play-btn:disabled { background: #3d2b6b; cursor: not-allowed; }
+.preview-play-btn:hover { background: #db2777; }
+.preview-play-btn:disabled { background: #6b2145; cursor: not-allowed; }
 
 .preview-seek {
   flex: 1;
@@ -401,6 +401,28 @@
 .preview-vol input[type="range"] {
   width: 60px;
   height: 3px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: #2d2d2d;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.preview-vol input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #888;
+  cursor: pointer;
+  margin-top: -2.5px;
+}
+.preview-vol input[type="range"]::-moz-range-thumb {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #888;
+  border: none;
+  cursor: pointer;
 }
 
 /* ── Properties Panel ─────────────────────────────────────────────────────── */
@@ -479,6 +501,28 @@
 .props-slider {
   flex: 1;
   height: 3px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: #2d2d2d;
+  border-radius: 2px;
+  cursor: pointer;
+}
+.props-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  cursor: pointer;
+  margin-top: -2.5px;
+}
+.props-slider::-moz-range-thumb {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  border: none;
+  cursor: pointer;
 }
 
 .props-input {

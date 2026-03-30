@@ -32,17 +32,20 @@ async function getOrLoadPipeline(
   if (!model) throw new Error(`Unknown model: ${modelId}`);
 
   if (model.engine === "kokoro") {
-    const { KokoroTTS } = await import("kokoro-js");
+    const { KokoroTTS, env: kokoroEnv } = await import("kokoro-js");
+
+    // Disable WASM proxy — run inference directly on this worker thread.
+    // Without this, kokoro spawns a sub-worker from ort.bundle.min.mjs which
+    // is stubbed out (webpack can't minify its import.meta usage), causing
+    // "no available backend" at runtime.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (kokoroEnv as any).backends.onnx.wasm.proxy = false;
+
     postPhase({ state: "downloading", file: "model config", pct: 0 });
 
-    const supportsWebGPU =
-      typeof navigator !== "undefined" &&
-      "gpu" in navigator &&
-      !!navigator.gpu;
-
     const instance = await KokoroTTS.from_pretrained(model.hfModelId, {
-      dtype: supportsWebGPU ? "fp32" : "q8",
-      device: supportsWebGPU ? "webgpu" : "wasm",
+      dtype: "q8",
+      device: "wasm",
       progress_callback: (info: { status?: string; file?: string; progress?: number }) => {
         if (info.status === "progress" || info.status === "downloading") {
           postPhase({

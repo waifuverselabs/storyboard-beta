@@ -34,12 +34,6 @@ export default function Toolbar({
 
   return (
     <div className="toolbar">
-      {/* Logo */}
-      <div className="toolbar-logo">
-        <div className="toolbar-logo-dot" />
-        STORYBOARD
-      </div>
-
       <div className="toolbar-sep" />
 
       {/* Import */}
