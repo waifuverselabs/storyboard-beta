@@ -43,7 +43,7 @@ function Slider({
           background: `linear-gradient(to right, #8b5cf6 ${((value - min) / (max - min)) * 100}%, #2d2d2d 0%)`,
         }}
       />
-      <span className="props-value" style={{ minWidth: 36, textAlign: "right" }}>
+      <span className="props-value" style={{ minWidth: 44, flexShrink: 0, textAlign: "right" }}>
         {format(value)}
       </span>
     </div>
