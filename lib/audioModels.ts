@@ -46,7 +46,6 @@ export const AUDIO_MODELS: AudioModel[] = [
     engine: "transformers",
     hfModelId: "Xenova/musicgen-small",
     pipeline: "text-to-audio",
-    quantized: false,
     sampleRate: 32000,
     tokensPerSecond: 50,
     maxDurationSeconds: 30,
