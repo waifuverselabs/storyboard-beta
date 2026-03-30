@@ -101,47 +101,6 @@ export const AUDIO_MODELS: AudioModel[] = [
       "Nothing has to move quickly right now. Let the pace stay easy.",
     ],
   },
-  {
-    id: "speecht5-tts",
-    name: "SpeechT5",
-    tag: "TTS",
-    description:
-      "Microsoft SpeechT5 — high quality, natural-sounding English voice. Good for narration.",
-    size: "~75 MB",
-    task: "tts",
-    engine: "transformers",
-    hfModelId: "Xenova/speecht5_tts",
-    pipeline: "text-to-audio",
-    sampleRate: 16000,
-    quantized: false,
-    speakerEmbeddingUrl:
-      "https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/speaker_embeddings.bin",
-    color: "#0ea5e9",
-    prompts: [
-      "Welcome to the scene.",
-      "Type any narration or voiceover text here.",
-      "The quick brown fox jumps over the lazy dog.",
-    ],
-  },
-  {
-    id: "mms-tts-eng",
-    name: "MMS TTS",
-    tag: "TTS",
-    description:
-      "Meta MMS — tiny English TTS, instant generation, no speaker embeddings needed.",
-    size: "~40 MB",
-    task: "tts",
-    engine: "transformers",
-    hfModelId: "Xenova/mms-tts-eng",
-    pipeline: "text-to-speech",
-    sampleRate: 16000,
-    color: "#06b6d4",
-    prompts: [
-      "Type any narration or voiceover text here.",
-      "Welcome to the scene.",
-      "And that's a wrap.",
-    ],
-  },
 ];
 
 export function getModel(id: string): AudioModel {

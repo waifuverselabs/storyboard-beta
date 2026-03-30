@@ -31,7 +31,8 @@ import LogFooter from "@/components/LogFooter";
 
 const DEFAULT_TRACKS: Track[] = [
   { id: "v1", kind: "video", label: "V1", muted: false, locked: false, height: 76 },
-  { id: "a1", kind: "audio", label: "A1", muted: false, locked: false, height: 52 },
+  { id: "a1", kind: "audio", label: "Music", muted: false, locked: false, height: 52 },
+  { id: "a2", kind: "audio", label: "Voice", muted: false, locked: false, height: 52 },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -340,15 +341,18 @@ export default function EditorPage() {
   // ── AI Audio generation → add to timeline ────────────────────────────────
 
   const handleAudioGenAdd = useCallback(
-    async (blob: Blob, durationSeconds: number, prompt: string, modelName: string) => {
+    async (blob: Blob, durationSeconds: number, prompt: string, modelName: string, task?: string) => {
       // Turn the blob into a File so it works with the rest of the pipeline
       const safeName = modelName.replace(/\s+/g, "_").toLowerCase();
       const fileName = `ai_${safeName}_${Date.now()}.wav`;
       const file = new File([blob], fileName, { type: "audio/wav" });
       const url = URL.createObjectURL(blob);
 
-      // Find or create an audio track to land on
-      const audioTrack = tracks.find((t) => t.kind === "audio") ?? null;
+      // Music → Music track (a1), TTS/voice → Voice track (a2)
+      const audioTracks = tracks.filter((t) => t.kind === "audio");
+      const audioTrack = task === "tts"
+        ? (audioTracks[1] ?? audioTracks[0])
+        : audioTracks[0];
       if (!audioTrack) {
         addLog("No audio track found — add one first.", "warn");
         return;

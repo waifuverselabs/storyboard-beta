@@ -20,20 +20,24 @@ const nextConfig = {
     // Stub server-only / native packages
     config.resolve.alias = {
       ...config.resolve.alias,
-      // Point @huggingface/transformers at the browser-only bundle
+      // Point these packages at their browser-only bundles
       "@huggingface/transformers": path.resolve(
         __dirname,
         "node_modules/@huggingface/transformers/dist/transformers.web.js"
+      ),
+      "kokoro-js": path.resolve(
+        __dirname,
+        "node_modules/kokoro-js/dist/kokoro.web.js"
       ),
       "onnxruntime-node$": false,
       "sharp$": false,
     };
 
-    // The ort WebGPU bundle uses `import.meta` which Terser can't minify.
-    // Replace it with an empty stub — we only use the WASM backend.
+    // The ort JS bundles use `import.meta` which Terser can't minify.
+    // Stub them all out — we only use the WASM backend at runtime.
     config.plugins.push(
       new webpack.NormalModuleReplacementPlugin(
-        /ort\.webgpu\.bundle\.min\.mjs$/,
+        /ort(\.[a-z.]+)?\.bundle\.min\.mjs$/,
         path.resolve(__dirname, "lib/stub.js")
       )
     );

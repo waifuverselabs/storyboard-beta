@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "cp node_modules/onnxruntime-web/dist/ort.bundle.min.mjs node_modules/kokoro-js/dist/ && cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm node_modules/kokoro-js/dist/"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.10",

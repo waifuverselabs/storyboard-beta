@@ -11,7 +11,7 @@ interface AudioGenModalProps {
   clips: TimelineClip[];
   tracks: Track[];
   totalDuration: number;
-  onAdd: (blob: Blob, durationSeconds: number, prompt: string, modelName: string) => void;
+  onAdd: (blob: Blob, durationSeconds: number, prompt: string, modelName: string, task: string) => void;
   onClose: () => void;
 }
 
@@ -108,7 +108,7 @@ export default function AudioGenModal({
 
   const handleAdd = () => {
     if (!resultBlob) return;
-    onAdd(resultBlob, resultDur, prompt, model.name);
+    onAdd(resultBlob, resultDur, prompt, model.name, model.task);
     onClose();
   };
 
