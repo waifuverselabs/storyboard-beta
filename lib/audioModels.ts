@@ -4,6 +4,7 @@
  */
 
 export type AudioTask = "music" | "tts" | "sfx";
+export type AudioEngine = "transformers" | "kokoro";
 
 export interface AudioModel {
   id: string;
@@ -12,8 +13,9 @@ export interface AudioModel {
   description: string;
   size: string;             // human-readable download size
   task: AudioTask;
-  hfModelId: string;        // Hugging Face model ID for @xenova/transformers
-  pipeline: "text-to-audio" | "text-to-speech";
+  engine?: AudioEngine;
+  hfModelId: string;        // Hugging Face model ID
+  pipeline?: "text-to-audio" | "text-to-speech";
   sampleRate: number;
   /** ~tokens per second of audio (MusicGen only — undefined for TTS) */
   tokensPerSecond?: number;
@@ -22,6 +24,12 @@ export interface AudioModel {
   speakerEmbeddingUrl?: string;
   /** Some models want quantized: false for better quality */
   quantized?: boolean;
+  /** Kokoro voice identifier */
+  voice?: string;
+  /** Kokoro speaking speed */
+  speed?: number;
+  /** Prefer this model when opening the modal */
+  defaultSelected?: boolean;
   prompts: string[];        // suggested prompts shown in the modal
   color: string;            // accent color for the card
 }
@@ -35,6 +43,7 @@ export const AUDIO_MODELS: AudioModel[] = [
     description: "Fast text-to-music. Great for background tracks, ~5–30s clips.",
     size: "~183 MB",
     task: "music",
+    engine: "transformers",
     hfModelId: "Xenova/musicgen-small",
     pipeline: "text-to-audio",
     sampleRate: 32000,
@@ -52,6 +61,47 @@ export const AUDIO_MODELS: AudioModel[] = [
   },
   // ── Text-to-speech ───────────────────────────────────────────────────────
   {
+    id: "kokoro-soft",
+    name: "Kokoro Soft",
+    tag: "TTS",
+    description:
+      "Kokoro 82M runs fully in-browser and defaults to a softer, slower delivery for gentle narration.",
+    size: "~330 MB",
+    task: "tts",
+    engine: "kokoro",
+    hfModelId: "onnx-community/Kokoro-82M-v1.0-ONNX",
+    sampleRate: 24000,
+    voice: "af_nicole",
+    speed: 0.92,
+    defaultSelected: true,
+    color: "#ec4899",
+    prompts: [
+      "Let the room settle for a second, and just listen to the quiet around you.",
+      "Stay close. I'll keep my voice soft and slow while the rest of the world fades back.",
+      "Take a slow breath in, hold it, and let it go without rushing.",
+    ],
+  },
+  {
+    id: "kokoro-airy",
+    name: "Kokoro Airy",
+    tag: "TTS",
+    description:
+      "An airier Kokoro preset using af_sky for lighter, breathier narration while staying fully in-browser.",
+    size: "~330 MB",
+    task: "tts",
+    engine: "kokoro",
+    hfModelId: "onnx-community/Kokoro-82M-v1.0-ONNX",
+    sampleRate: 24000,
+    voice: "af_sky",
+    speed: 0.9,
+    color: "#f472b6",
+    prompts: [
+      "Keep it light and close, like the room is already quiet before I start speaking.",
+      "The air feels still tonight, and every word lands a little softer than before.",
+      "Nothing has to move quickly right now. Let the pace stay easy.",
+    ],
+  },
+  {
     id: "speecht5-tts",
     name: "SpeechT5",
     tag: "TTS",
@@ -59,6 +109,7 @@ export const AUDIO_MODELS: AudioModel[] = [
       "Microsoft SpeechT5 — high quality, natural-sounding English voice. Good for narration.",
     size: "~75 MB",
     task: "tts",
+    engine: "transformers",
     hfModelId: "Xenova/speecht5_tts",
     pipeline: "text-to-audio",
     sampleRate: 16000,
@@ -80,6 +131,7 @@ export const AUDIO_MODELS: AudioModel[] = [
       "Meta MMS — tiny English TTS, instant generation, no speaker embeddings needed.",
     size: "~40 MB",
     task: "tts",
+    engine: "transformers",
     hfModelId: "Xenova/mms-tts-eng",
     pipeline: "text-to-speech",
     sampleRate: 16000,

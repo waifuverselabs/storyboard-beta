@@ -31,6 +31,38 @@ async function getOrLoadPipeline(
   const model = AUDIO_MODELS.find((m) => m.id === modelId);
   if (!model) throw new Error(`Unknown model: ${modelId}`);
 
+  if (model.engine === "kokoro") {
+    const { KokoroTTS } = await import("kokoro-js");
+    postPhase({ state: "downloading", file: "model config", pct: 0 });
+
+    const supportsWebGPU =
+      typeof navigator !== "undefined" &&
+      "gpu" in navigator &&
+      !!navigator.gpu;
+
+    const instance = await KokoroTTS.from_pretrained(model.hfModelId, {
+      dtype: supportsWebGPU ? "fp32" : "q8",
+      device: supportsWebGPU ? "webgpu" : "wasm",
+      progress_callback: (info: { status?: string; file?: string; progress?: number }) => {
+        if (info.status === "progress" || info.status === "downloading") {
+          postPhase({
+            state: "downloading",
+            file: info.file ?? "weights",
+            pct: Math.round(info.progress ?? 0),
+          });
+        } else if (info.status === "initiate") {
+          postPhase({ state: "downloading", file: info.file ?? "model", pct: 0 });
+        } else if (info.status === "done") {
+          postPhase({ state: "loading" });
+        }
+      },
+    });
+
+    pipelines.set(modelId, instance);
+    postPhase({ state: "ready" });
+    return instance;
+  }
+
   // Dynamic import inside the worker — webpack bundles this correctly
   const { pipeline, env } = await import("@huggingface/transformers");
 
@@ -41,7 +73,7 @@ async function getOrLoadPipeline(
 
   postPhase({ state: "downloading", file: "model config", pct: 0 });
 
-  const instance = await pipeline(model.pipeline, model.hfModelId, {
+  const instance = await pipeline(model.pipeline!, model.hfModelId, {
     dtype: model.quantized === false ? "fp32" : "q8",
     progress_callback: (info: { status: string; file?: string; progress?: number }) => {
       if (info.status === "progress" || info.status === "downloading") {
@@ -149,6 +181,33 @@ self.onmessage = async (e: MessageEvent) => {
     // ── Text-to-speech ───────────────────────────────────────────────────
     if (model.task === "tts") {
       postPhase({ state: "generating", tokensGenerated: 0, maxTokens: 100 });
+
+      if (model.engine === "kokoro") {
+        const raw = await pipe.generate(prompt, {
+          voice: model.voice ?? "af_nicole",
+          speed: model.speed ?? 1,
+        });
+
+        postPhase({ state: "generating", tokensGenerated: 100, maxTokens: 100 });
+
+        const sampleRate: number = raw.sampling_rate ?? model.sampleRate;
+        const audioData: Float32Array =
+          raw.data instanceof Float32Array ? raw.data :
+          raw.audio instanceof Float32Array ? raw.audio :
+          new Float32Array(0);
+
+        const dur = audioData.length / sampleRate;
+        let buffer: ArrayBuffer;
+        if (typeof raw.toBlob === "function") {
+          const blob: Blob = raw.toBlob();
+          buffer = await blob.arrayBuffer();
+        } else {
+          buffer = encodeWAV(audioData, sampleRate);
+        }
+
+        self.postMessage({ type: "done", id, buffer, durationSeconds: dur, sampleRate }, [buffer]);
+        return;
+      }
 
       const opts: Record<string, unknown> = {};
 

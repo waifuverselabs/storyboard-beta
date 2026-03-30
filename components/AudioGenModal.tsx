@@ -22,7 +22,8 @@ export default function AudioGenModal({
   onAdd,
   onClose,
 }: AudioGenModalProps) {
-  const [selectedModelId, setSelectedModelId] = useState(AUDIO_MODELS[0].id);
+  const defaultModel = AUDIO_MODELS.find((m) => m.defaultSelected) ?? AUDIO_MODELS[0];
+  const [selectedModelId, setSelectedModelId] = useState(defaultModel.id);
   const model = AUDIO_MODELS.find((m) => m.id === selectedModelId)!;
 
   const videoTracks = tracks.filter((t) => t.kind === "video");
