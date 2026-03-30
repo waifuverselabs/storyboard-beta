@@ -177,6 +177,7 @@ export default function Timeline({
 
   const onTrackDrop = (e: React.DragEvent, trackId: string) => {
     e.preventDefault();
+    e.stopPropagation(); // prevent bubbling to global page drop handler
     setDragOverTrack(null);
     const rect = e.currentTarget.getBoundingClientRect();
     const scrollLeft = scrollRef.current?.scrollLeft ?? 0;

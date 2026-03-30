@@ -21,6 +21,19 @@ import type { LoadPhase } from "./musicgen";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const pipelines = new Map<string, any>();
 
+// Configure onnxruntime-web before any model loads:
+// - proxy: false → run WASM on this thread, no blob-URL sub-worker
+// - numThreads: 1 → no SharedArrayBuffer threading needed
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ortConfigured = import("onnxruntime-web").then((ort: any) => {
+  try {
+    if (ort?.env?.wasm) {
+      ort.env.wasm.proxy = false;
+      ort.env.wasm.numThreads = 1;
+    }
+  } catch { /* ignore */ }
+}).catch(() => {});
+
 async function getOrLoadPipeline(
   modelId: string,
   postPhase: (p: LoadPhase) => void
@@ -32,12 +45,8 @@ async function getOrLoadPipeline(
   if (!model) throw new Error(`Unknown model: ${modelId}`);
 
   if (model.engine === "kokoro") {
-    const { KokoroTTS, env: kokoroEnv } = await import("kokoro-js");
-
-    // Disable WASM proxy so kokoro runs inference on this thread directly.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const onnxEnv = (kokoroEnv as any)?.backends?.onnx;
-    if (onnxEnv?.wasm) onnxEnv.wasm.proxy = false;
+    await ortConfigured;
+    const { KokoroTTS } = await import("kokoro-js");
 
     postPhase({ state: "downloading", file: "model config", pct: 0 });
 
@@ -65,12 +74,10 @@ async function getOrLoadPipeline(
   }
 
   // Dynamic import inside the worker — webpack bundles this correctly
+  await ortConfigured;
   const { pipeline, env } = await import("@huggingface/transformers");
 
   env.allowLocalModels = false;
-  // Run ONNX directly on this worker thread — no sub-worker needed
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (env as any).backends.onnx.wasm.proxy = false;
 
   postPhase({ state: "downloading", file: "model config", pct: 0 });
 

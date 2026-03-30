@@ -347,26 +347,30 @@
   color: #fff;
   width: 30px;
   height: 30px;
-  border-radius: 50%;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
   flex-shrink: 0;
   transition: background 0.15s;
+  box-shadow: 0 0 8px #ec489966;
 }
-.preview-play-btn:hover { background: #db2777; }
-.preview-play-btn:disabled { background: #6b2145; cursor: not-allowed; }
+.preview-play-btn:hover { background: #f472b6; box-shadow: 0 0 12px #ec4899aa; }
+.preview-play-btn:disabled { background: #6b2145; box-shadow: none; cursor: not-allowed; }
 
 .preview-seek {
   flex: 1;
-  height: 4px;
+  height: 16px;
   appearance: none;
   -webkit-appearance: none;
-  background: #2d2d2d;
-  border-radius: 2px;
+  background: transparent;
   cursor: pointer;
-  position: relative;
+}
+.preview-seek::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: inherit;
 }
 .preview-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -377,7 +381,7 @@
   cursor: pointer;
   margin-top: -4px;
 }
-.preview-seek::-webkit-slider-runnable-track {
+.preview-seek::-moz-range-track {
   height: 4px;
   border-radius: 2px;
 }
@@ -400,26 +404,35 @@
 .preview-vol-icon { color: #666; font-size: 12px; }
 .preview-vol input[type="range"] {
   width: 60px;
-  height: 3px;
+  height: 16px;
   appearance: none;
   -webkit-appearance: none;
-  border-radius: 2px;
+  background: transparent;
   cursor: pointer;
+}
+.preview-vol input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: inherit;
 }
 .preview-vol input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #888;
+  background: #39ff14;
   cursor: pointer;
   margin-top: -2.5px;
+}
+.preview-vol input[type="range"]::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
 }
 .preview-vol input[type="range"]::-moz-range-thumb {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #888;
+  background: #39ff14;
   border: none;
   cursor: pointer;
 }
@@ -499,11 +512,16 @@
 
 .props-slider {
   flex: 1;
-  height: 3px;
+  height: 16px;
   appearance: none;
   -webkit-appearance: none;
-  border-radius: 2px;
+  background: transparent;
   cursor: pointer;
+}
+.props-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: inherit;
 }
 .props-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -513,6 +531,10 @@
   background: #8b5cf6;
   cursor: pointer;
   margin-top: -2.5px;
+}
+.props-slider::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
 }
 .props-slider::-moz-range-thumb {
   width: 8px;
