@@ -186,6 +186,8 @@ export default function EditorPage() {
         posY: 0,
         scale: 1,
         opacity: 1,
+        fadeIn: 0,
+        fadeOut: 0,
       };
 
       setClips((prev) => [...prev, clip]);
@@ -416,6 +418,8 @@ export default function EditorPage() {
         posY: 0,
         scale: 1,
         opacity: 1,
+        fadeIn: 0,
+        fadeOut: 0,
       };
 
       setClips((prev) => [...prev, clip]);

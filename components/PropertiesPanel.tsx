@@ -157,13 +157,23 @@ export default function PropertiesPanel({
               />
 
               <Slider
-                label="Opacity"
-                value={selectedClip.opacity}
+                label="Fade in"
+                value={selectedClip.fadeIn ?? 0}
                 min={0}
-                max={1}
-                step={0.01}
-                format={(v) => `${Math.round(v * 100)}%`}
-                onChange={(v) => onUpdateClip(selectedClip.id, { opacity: v })}
+                max={Math.min(selectedClip.duration / 2, 5)}
+                step={0.1}
+                format={(v) => v === 0 ? "off" : `${v.toFixed(1)}s`}
+                onChange={(v) => onUpdateClip(selectedClip.id, { fadeIn: v })}
+              />
+
+              <Slider
+                label="Fade out"
+                value={selectedClip.fadeOut ?? 0}
+                min={0}
+                max={Math.min(selectedClip.duration / 2, 5)}
+                step={0.1}
+                format={(v) => v === 0 ? "off" : `${v.toFixed(1)}s`}
+                onChange={(v) => onUpdateClip(selectedClip.id, { fadeOut: v })}
               />
 
               <Slider

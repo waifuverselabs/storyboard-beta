@@ -30,6 +30,8 @@ export interface TimelineClip {
   posY: number;
   scale: number;      // 1 = fill
   opacity: number;    // 0 – 1
+  fadeIn: number;     // seconds
+  fadeOut: number;    // seconds
 }
 
 export interface Track {

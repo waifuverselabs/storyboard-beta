@@ -262,7 +262,10 @@ export async function exportTimeline({
       videoSegLabels.push(`[${gapLabel}]`);
     }
 
-    // Build vf chain: trim, setpts, scale/pad, fps, optional speed
+    // Build vf chain: trim, setpts, scale/pad, fps, optional speed, fade in/out
+    const fadeIn = clip.fadeIn ?? 0;
+    const fadeOut = clip.fadeOut ?? 0;
+    const clipDur = clip.duration;
     let vfParts = [
       `trim=start=${clip.trimStart.toFixed(6)}:duration=${sourceDuration.toFixed(6)}`,
       `setpts=${speed !== 1 ? `(1/${speed.toFixed(6)})*` : ""}(PTS-STARTPTS)`,
@@ -270,6 +273,8 @@ export async function exportTimeline({
       `pad=${outW}:${outH}:(ow-iw)/2:(oh-ih)/2`,
       `fps=${outFps}`,
     ];
+    if (fadeIn > 0) vfParts.push(`fade=t=in:st=0:d=${fadeIn.toFixed(3)}`);
+    if (fadeOut > 0) vfParts.push(`fade=t=out:st=${Math.max(0, clipDur - fadeOut).toFixed(3)}:d=${fadeOut.toFixed(3)}`);
 
     filters.push(`[${iIdx}:v]${vfParts.join(",")}[${label}]`);
     videoSegLabels.push(`[${label}]`);
@@ -315,11 +320,16 @@ export async function exportTimeline({
     const label = `aonly${ci}`;
 
     const tempoChain = atempoChain(speed);
+    const fadeIn = clip.fadeIn ?? 0;
+    const fadeOut = clip.fadeOut ?? 0;
+    const clipDur = clip.duration;
     const afParts = [
       `atrim=start=${clip.trimStart.toFixed(6)}:duration=${sourceDuration.toFixed(6)}`,
       "asetpts=PTS-STARTPTS",
       tempoChain,
       `volume=${clip.volume.toFixed(4)}`,
+      fadeIn > 0 ? `afade=t=in:st=0:d=${fadeIn.toFixed(3)}` : "",
+      fadeOut > 0 ? `afade=t=out:st=${Math.max(0, clipDur - fadeOut).toFixed(3)}:d=${fadeOut.toFixed(3)}` : "",
       `adelay=${delayMs}|${delayMs}`,
     ].filter(Boolean);
 
