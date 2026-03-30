@@ -37,6 +37,7 @@ export default function AudioGenModal({
   );
 
   const [prompt, setPrompt] = useState(model.prompts[0]);
+  const [speed, setSpeed] = useState(model.speed ?? 1);
   const [targetDur, setTargetDur] = useState(Math.min(Math.ceil(sceneDuration), model.maxDurationSeconds ?? 30));
   const [phase, setPhase] = useState<LoadPhase>({ state: "idle" });
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
@@ -53,6 +54,7 @@ export default function AudioGenModal({
   const selectModel = (m: AudioModel) => {
     setSelectedModelId(m.id);
     setPrompt(m.prompts[0]);
+    setSpeed(m.speed ?? 1);
     const maxDur = m.maxDurationSeconds ?? 30;
     setTargetDur(Math.min(Math.ceil(sceneDuration), maxDur));
     setResultBlob(null);
@@ -93,6 +95,7 @@ export default function AudioGenModal({
         model,
         prompt,
         durationSeconds: targetDur,
+        speed,
         onPhase: setPhase,
       });
 
@@ -200,6 +203,29 @@ export default function AudioGenModal({
             ))}
           </div>
         </div>
+
+        {/* Speed (TTS only) */}
+        {isTTS && (
+          <div className="modal-section">
+            <div className="modal-label-row">
+              <label className="modal-label">Speaking speed</label>
+              <span className="modal-dur-val">{speed.toFixed(2)}×</span>
+            </div>
+            <input
+              type="range"
+              min={0.5}
+              max={1.2}
+              step={0.05}
+              value={speed}
+              onChange={(e) => setSpeed(parseFloat(e.target.value))}
+              disabled={isGenerating}
+              style={{ width: "100%", accentColor: model.color }}
+            />
+            <div className="modal-dur-hint">
+              {speed < 0.7 ? "Very slow — clear and deliberate" : speed < 0.9 ? "Slow — relaxed narration" : speed < 1.05 ? "Normal pace" : "Fast"}
+            </div>
+          </div>
+        )}
 
         {/* Duration (music only) */}
         {!isTTS && (

@@ -32,6 +32,7 @@ export interface GenerateOptions {
   model: AudioModel;
   prompt: string;
   durationSeconds?: number;
+  speed?: number;
   onPhase: (p: LoadPhase) => void;
 }
 
@@ -39,6 +40,7 @@ export function generateAudio({
   model,
   prompt,
   durationSeconds = 10,
+  speed,
   onPhase,
 }: GenerateOptions): Promise<{ blob: Blob; durationSeconds: number; sampleRate: number }> {
   return new Promise((resolve, reject) => {
@@ -70,7 +72,7 @@ export function generateAudio({
     };
 
     w.addEventListener("message", handler);
-    w.postMessage({ type: "generate", id, modelId: model.id, prompt, durationSeconds });
+    w.postMessage({ type: "generate", id, modelId: model.id, prompt, durationSeconds, speed });
   });
 }
 

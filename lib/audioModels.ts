@@ -73,7 +73,7 @@ export const AUDIO_MODELS: AudioModel[] = [
     hfModelId: "onnx-community/Kokoro-82M-v1.0-ONNX",
     sampleRate: 24000,
     voice: "af_nicole",
-    speed: 0.92,
+    speed: 0.8,
     defaultSelected: true,
     color: "#ec4899",
     prompts: [
@@ -94,7 +94,7 @@ export const AUDIO_MODELS: AudioModel[] = [
     hfModelId: "onnx-community/Kokoro-82M-v1.0-ONNX",
     sampleRate: 24000,
     voice: "af_sky",
-    speed: 0.9,
+    speed: 0.8,
     color: "#f472b6",
     prompts: [
       "Keep it light and close, like the room is already quiet before I start speaking.",

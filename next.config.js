@@ -28,19 +28,19 @@ const nextConfig = {
         __dirname,
         "node_modules/kokoro-js/dist/kokoro.web.js"
       ),
-      // Use the ESM bundle variant. ort.bundle.min.mjs annotates all its dynamic
-      // WASM imports with /*webpackIgnore:true*/ so webpack does not intercept
-      // them — they become native browser fetch/import calls resolved by wasmPaths.
-      // Both the bare import and the /webgpu subpath alias to the same module so
-      // that @huggingface/transformers (which imports onnxruntime-web/webgpu) and
-      // our direct import share ONE singleton configured in ortConfigured.
+      // Use the WASM-only ESM bundle. Unlike ort.bundle.min.mjs, this bundle does
+      // NOT load ort-wasm-simd-threaded.jsep.mjs (WebGPU/JSEP) at startup — it
+      // loads only ort-wasm-simd-threaded.mjs (plain WASM). We don't need JSEP
+      // since we run in WASM mode (numThreads:1). Both the bare import and the
+      // /webgpu subpath alias here so @huggingface/transformers (which imports
+      // onnxruntime-web/webgpu) and our direct import share ONE singleton.
       "onnxruntime-web$": path.resolve(
         __dirname,
-        "node_modules/onnxruntime-web/dist/ort.bundle.min.mjs"
+        "node_modules/onnxruntime-web/dist/ort.wasm.bundle.min.mjs"
       ),
       "onnxruntime-web/webgpu": path.resolve(
         __dirname,
-        "node_modules/onnxruntime-web/dist/ort.bundle.min.mjs"
+        "node_modules/onnxruntime-web/dist/ort.wasm.bundle.min.mjs"
       ),
       "onnxruntime-node$": false,
       "sharp$": false,
@@ -52,7 +52,19 @@ const nextConfig = {
     // SWC rejects import.meta when minifying webpack's CJS output chunks.
     const stripImportMetaLoader = path.resolve(__dirname, "lib/strip-import-meta-loader.js");
     config.module.rules.push({
-      test: /node_modules[\\/](kokoro-js[\\/]dist[\\/]kokoro\.web\.js|@huggingface[\\/]transformers[\\/]dist[\\/]transformers\.web\.js|onnxruntime-web[\\/]dist[\\/]ort\.bundle\.min\.mjs)$/,
+      test: /node_modules[\\/](kokoro-js[\\/]dist[\\/]kokoro\.web\.js|@huggingface[\\/]transformers[\\/]dist[\\/]transformers\.web\.js|onnxruntime-web[\\/]dist[\\/]ort\.wasm\.bundle\.min\.mjs)$/,
+      use: [{ loader: stripImportMetaLoader }],
+    });
+
+    // Make /ort-wasm/*.mjs importable as webpack modules: resolve absolute-path
+    // imports against public/ so webpack can find and bundle the WASM glue files
+    // if webpackIgnore magic comments are stripped during bundling.
+    config.resolve.roots = [
+      ...(config.resolve.roots ?? []),
+      path.resolve(__dirname, "public"),
+    ];
+    config.module.rules.push({
+      test: /public[\\/]ort-wasm[\\/].*\.mjs$/,
       use: [{ loader: stripImportMetaLoader }],
     });
 

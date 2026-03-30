@@ -128,12 +128,13 @@ function encodeWAV(samples: Float32Array, sampleRate: number): ArrayBuffer {
 }
 
 self.onmessage = async (e: MessageEvent) => {
-  const { type, id, modelId, prompt, durationSeconds } = e.data as {
+  const { type, id, modelId, prompt, durationSeconds, speed } = e.data as {
     type: string;
     id: string;
     modelId: string;
     prompt: string;
     durationSeconds: number;
+    speed?: number;
   };
 
   if (type !== "generate") return;
@@ -187,7 +188,7 @@ self.onmessage = async (e: MessageEvent) => {
       if (model.engine === "kokoro") {
         const raw = await pipe.generate(prompt, {
           voice: model.voice ?? "af_nicole",
-          speed: model.speed ?? 1,
+          speed: speed ?? model.speed ?? 1,
         });
 
         postPhase({ state: "generating", tokensGenerated: 100, maxTokens: 100 });
