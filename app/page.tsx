@@ -447,39 +447,44 @@ export default function EditorPage() {
   }, [mediaItems, exportUrl, addLog]);
 
   // ── Global drag-over (file drop) ──────────────────────────────────────────
-  // Use a counter so nested dragenter/dragleave pairs don't cause flicker/stuck.
+  // Use a self-clearing timer keyed to dragover events. dragover fires
+  // continuously while dragging; when it stops (drop or leave), the timer
+  // expires and hides the overlay. This survives stopPropagation on drop
+  // targets (like Timeline tracks) that prevent the window drop from firing.
 
   useEffect(() => {
-    let depth = 0;
+    let clearTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleHide = () => {
+      if (clearTimer) clearTimeout(clearTimer);
+      clearTimer = setTimeout(() => {
+        setGlobalDragOver(false);
+        clearTimer = null;
+      }, 300);
+    };
+
     const over = (e: DragEvent) => {
-      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
-    };
-    const enter = (e: DragEvent) => {
       if (!e.dataTransfer?.types.includes("Files")) return;
-      depth++;
+      e.preventDefault();
       setGlobalDragOver(true);
+      scheduleHide(); // reset the 300ms countdown on every dragover tick
     };
-    const leave = () => {
-      depth = Math.max(0, depth - 1);
-      if (depth === 0) setGlobalDragOver(false);
-    };
+
     const drop = (e: DragEvent) => {
-      depth = 0;
+      if (clearTimer) { clearTimeout(clearTimer); clearTimer = null; }
       setGlobalDragOver(false);
       if (e.dataTransfer?.files.length) {
         e.preventDefault();
         importFiles(e.dataTransfer.files);
       }
     };
+
     window.addEventListener("dragover", over);
-    window.addEventListener("dragenter", enter);
-    window.addEventListener("dragleave", leave);
     window.addEventListener("drop", drop);
     return () => {
       window.removeEventListener("dragover", over);
-      window.removeEventListener("dragenter", enter);
-      window.removeEventListener("dragleave", leave);
       window.removeEventListener("drop", drop);
+      if (clearTimer) clearTimeout(clearTimer);
     };
   }, [importFiles]);
 

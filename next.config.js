@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const path = require("path");
-const webpack = require("webpack");
 
 const nextConfig = {
   // Required for ffmpeg.wasm SharedArrayBuffer support
@@ -29,24 +28,21 @@ const nextConfig = {
         __dirname,
         "node_modules/kokoro-js/dist/kokoro.web.js"
       ),
-      // Use the CJS bundle — zero import.meta, initialises ort.env.wasm correctly
+      // Use the CJS bundle — zero import.meta, initialises ort.env.wasm correctly.
+      // Both the bare import and the /webgpu subpath alias to the same module so
+      // that @huggingface/transformers (which imports onnxruntime-web/webgpu) and
+      // our direct import share the SAME singleton — one config call covers both.
       "onnxruntime-web$": path.resolve(
+        __dirname,
+        "node_modules/onnxruntime-web/dist/ort.min.js"
+      ),
+      "onnxruntime-web/webgpu": path.resolve(
         __dirname,
         "node_modules/onnxruntime-web/dist/ort.min.js"
       ),
       "onnxruntime-node$": false,
       "sharp$": false,
     };
-
-    // Stub only the WebGPU bundle — we don't use WebGPU backend.
-    // The main ort.bundle.min.mjs (WASM runtime) must NOT be stubbed
-    // because @huggingface/transformers imports it as its real WASM runtime.
-    config.plugins.push(
-      new webpack.NormalModuleReplacementPlugin(
-        /ort\.webgpu\.bundle\.min\.mjs$/,
-        path.resolve(__dirname, "lib/stub.js")
-      )
-    );
 
     // kokoro.web.js (and the ort bundles it embeds) use `import.meta` which SWC
     // rejects when minifying CJS output. Strip import.meta before bundling.
