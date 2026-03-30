@@ -340,10 +340,10 @@ export default function EditorPage() {
   // ── AI Audio generation → add to timeline ────────────────────────────────
 
   const handleAudioGenAdd = useCallback(
-    async (blob: Blob, durationSeconds: number, prompt: string) => {
+    async (blob: Blob, durationSeconds: number, prompt: string, modelName: string) => {
       // Turn the blob into a File so it works with the rest of the pipeline
-      const safeName = prompt.slice(0, 32).replace(/[^a-z0-9]/gi, "_").toLowerCase();
-      const fileName = `ai_audio_${safeName}.wav`;
+      const safeName = modelName.replace(/\s+/g, "_").toLowerCase();
+      const fileName = `ai_${safeName}_${Date.now()}.wav`;
       const file = new File([blob], fileName, { type: "audio/wav" });
       const url = URL.createObjectURL(blob);
 
@@ -389,7 +389,7 @@ export default function EditorPage() {
       };
 
       setClips((prev) => [...prev, clip]);
-      addLog(`✦ AI audio added to ${audioTrack.label} — ${durationSeconds.toFixed(1)}s`, "success");
+      addLog(`✦ ${modelName} → ${audioTrack.label} — ${durationSeconds.toFixed(1)}s`, "success");
     },
     [tracks, clips, addLog]
   );

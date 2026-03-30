@@ -2,24 +2,16 @@
 
 import { useState, useRef, useCallback } from "react";
 import type { TimelineClip, Track } from "@/lib/types";
-import { loadMusicGen, generateMusic, isModelCached } from "@/lib/musicgen";
+import { AUDIO_MODELS, type AudioModel } from "@/lib/audioModels";
+import { generateAudio, isModelLoaded } from "@/lib/musicgen";
 import type { LoadPhase } from "@/lib/musicgen";
 import { formatDuration } from "@/lib/mediaUtils";
-
-const PRESETS = [
-  { label: "Cinematic", prompt: "Cinematic orchestral score, dramatic strings and brass, emotional" },
-  { label: "Lo-fi", prompt: "Lo-fi hip hop, chill beats, warm vinyl crackle, relaxing" },
-  { label: "Ambient", prompt: "Ambient electronic, atmospheric pads, calm and ethereal" },
-  { label: "Upbeat", prompt: "Upbeat pop music, energetic rhythm, positive and bright" },
-  { label: "Tense", prompt: "Dark dramatic underscore, tense and suspenseful, minimal percussion" },
-  { label: "Acoustic", prompt: "Acoustic guitar fingerpicking, warm and nostalgic, gentle" },
-];
 
 interface AudioGenModalProps {
   clips: TimelineClip[];
   tracks: Track[];
   totalDuration: number;
-  onAdd: (blob: Blob, durationSeconds: number, prompt: string) => void;
+  onAdd: (blob: Blob, durationSeconds: number, prompt: string, modelName: string) => void;
   onClose: () => void;
 }
 
@@ -30,19 +22,21 @@ export default function AudioGenModal({
   onAdd,
   onClose,
 }: AudioGenModalProps) {
+  const [selectedModelId, setSelectedModelId] = useState(AUDIO_MODELS[0].id);
+  const model = AUDIO_MODELS.find((m) => m.id === selectedModelId)!;
+
   const videoTracks = tracks.filter((t) => t.kind === "video");
   const videoClips = clips.filter((c) =>
     videoTracks.some((t) => t.id === c.trackId)
   );
   const sceneDuration = Math.min(
-    videoClips.reduce((max, c) => Math.max(max, c.startTime + c.duration), 0) || totalDuration,
-    30
+    videoClips.reduce((max, c) => Math.max(max, c.startTime + c.duration), 0) ||
+      totalDuration,
+    model.maxDurationSeconds ?? 30
   );
 
-  const [prompt, setPrompt] = useState(PRESETS[0].prompt);
-  const [targetDur, setTargetDur] = useState(
-    Math.min(Math.ceil(sceneDuration), 30)
-  );
+  const [prompt, setPrompt] = useState(model.prompts[0]);
+  const [targetDur, setTargetDur] = useState(Math.min(Math.ceil(sceneDuration), model.maxDurationSeconds ?? 30));
   const [phase, setPhase] = useState<LoadPhase>({ state: "idle" });
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [resultDur, setResultDur] = useState(0);
@@ -54,21 +48,34 @@ export default function AudioGenModal({
     phase.state === "loading" ||
     phase.state === "generating";
 
+  // When model switches, reset prompt to that model's first suggestion
+  const selectModel = (m: AudioModel) => {
+    setSelectedModelId(m.id);
+    setPrompt(m.prompts[0]);
+    const maxDur = m.maxDurationSeconds ?? 30;
+    setTargetDur(Math.min(Math.ceil(sceneDuration), maxDur));
+    setResultBlob(null);
+    setPreviewUrl(null);
+  };
+
   const progressPct = (() => {
-    if (phase.state === "downloading") return Math.round(phase.pct * 0.7); // 0-70%
-    if (phase.state === "loading") return 72;
+    if (phase.state === "downloading") return Math.round(phase.pct * 0.72);
+    if (phase.state === "loading") return 74;
     if (phase.state === "generating") {
-      return Math.round(75 + (phase.tokensGenerated / phase.maxTokens) * 25);
+      if (phase.maxTokens === 0) return 80;
+      return Math.round(76 + (phase.tokensGenerated / phase.maxTokens) * 24);
     }
     return 0;
   })();
 
   const statusText = (() => {
-    if (phase.state === "idle") return isModelCached() ? "Model ready" : "Model not loaded (~183 MB, cached after first use)";
-    if (phase.state === "downloading") return `Downloading ${phase.file} — ${phase.pct}%`;
-    if (phase.state === "loading") return "Loading model into memory…";
-    if (phase.state === "generating")
-      return `Generating… ${phase.tokensGenerated} / ${phase.maxTokens} tokens`;
+    if (phase.state === "idle") return isModelLoaded(model.id) ? "Model ready in memory" : `${model.size} — cached after first download`;
+    if (phase.state === "downloading") return `↓ ${phase.file}  ${phase.pct}%`;
+    if (phase.state === "loading") return "Loading model weights…";
+    if (phase.state === "generating") {
+      if (model.task === "tts") return "Generating speech…";
+      return `Generating…  ${phase.tokensGenerated} / ${phase.maxTokens} tokens`;
+    }
     if (phase.state === "ready") return "Done ✓";
     if (phase.state === "error") return `Error: ${phase.message}`;
     return "";
@@ -76,17 +83,13 @@ export default function AudioGenModal({
 
   const handleGenerate = useCallback(async () => {
     if (isGenerating) return;
-
-    // Clear previous result
-    if (prevUrlRef.current) {
-      URL.revokeObjectURL(prevUrlRef.current);
-      prevUrlRef.current = null;
-    }
+    if (prevUrlRef.current) URL.revokeObjectURL(prevUrlRef.current);
     setResultBlob(null);
     setPreviewUrl(null);
 
     try {
-      const { blob, durationSeconds } = await generateMusic({
+      const { blob, durationSeconds } = await generateAudio({
+        model,
         prompt,
         durationSeconds: targetDur,
         onPhase: setPhase,
@@ -98,94 +101,131 @@ export default function AudioGenModal({
       setResultDur(durationSeconds);
       setPreviewUrl(url);
     } catch (e) {
-      setPhase({
-        state: "error",
-        message: e instanceof Error ? e.message : String(e),
-      });
+      setPhase({ state: "error", message: e instanceof Error ? e.message : String(e) });
     }
-  }, [isGenerating, prompt, targetDur]);
+  }, [isGenerating, model, prompt, targetDur]);
 
   const handleAdd = () => {
     if (!resultBlob) return;
-    onAdd(resultBlob, resultDur, prompt);
+    onAdd(resultBlob, resultDur, prompt, model.name);
     onClose();
   };
+
+  const isTTS = model.task === "tts";
 
   return (
     <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
+
         {/* Header */}
         <div className="modal-header">
           <div className="modal-title">
             <span className="modal-title-icon">✦</span>
-            Generate Scene Audio
+            Generate Audio
           </div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
-        {/* Scene info */}
+        {/* Model picker */}
+        <div className="model-picker">
+          <div className="model-picker-label">Model</div>
+          <div className="model-grid">
+            {AUDIO_MODELS.map((m) => (
+              <button
+                key={m.id}
+                className={`model-card ${selectedModelId === m.id ? "active" : ""}`}
+                style={{ "--model-color": m.color } as React.CSSProperties}
+                onClick={() => selectModel(m)}
+                disabled={isGenerating}
+              >
+                <div className="model-card-tag" style={{ background: m.color }}>
+                  {m.tag}
+                </div>
+                <div className="model-card-name">{m.name}</div>
+                <div className="model-card-size">{m.size}</div>
+                {isModelLoaded(m.id) && <div className="model-card-loaded">●</div>}
+              </button>
+            ))}
+          </div>
+          <div className="model-desc">{model.description}</div>
+        </div>
+
+        {/* Scene stats */}
         <div className="modal-scene-info">
           <div className="modal-scene-stat">
             <span className="modal-scene-stat-label">Video clips</span>
             <span className="modal-scene-stat-value">{videoClips.length}</span>
           </div>
           <div className="modal-scene-stat">
-            <span className="modal-scene-stat-label">Scene length</span>
+            <span className="modal-scene-stat-label">Scene</span>
             <span className="modal-scene-stat-value">{formatDuration(sceneDuration)}</span>
           </div>
-          <div className="modal-scene-stat">
-            <span className="modal-scene-stat-label">Generate up to</span>
-            <span className="modal-scene-stat-value">30s</span>
-          </div>
+          {!isTTS && (
+            <div className="modal-scene-stat">
+              <span className="modal-scene-stat-label">Max gen</span>
+              <span className="modal-scene-stat-value">{model.maxDurationSeconds ?? 30}s</span>
+            </div>
+          )}
         </div>
 
         {/* Prompt */}
         <div className="modal-section">
-          <label className="modal-label">Scene description</label>
+          <label className="modal-label">
+            {isTTS ? "Narration text" : "Scene description"}
+          </label>
           <textarea
             className="modal-textarea"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            rows={2}
-            placeholder="Describe the mood, style, and feel of the music…"
+            rows={isTTS ? 3 : 2}
+            placeholder={
+              isTTS
+                ? "Type the narration or voiceover text…"
+                : "Describe the mood, style, and feel…"
+            }
             disabled={isGenerating}
           />
           <div className="modal-presets">
-            {PRESETS.map((p) => (
+            {model.prompts.map((p) => (
               <button
-                key={p.label}
-                className={`modal-preset-btn ${prompt === p.prompt ? "active" : ""}`}
-                onClick={() => setPrompt(p.prompt)}
+                key={p}
+                className={`modal-preset-btn ${prompt === p ? "active" : ""}`}
+                style={{ "--model-color": model.color } as React.CSSProperties}
+                onClick={() => setPrompt(p)}
                 disabled={isGenerating}
               >
-                {p.label}
+                {p.length > 28 ? p.slice(0, 26) + "…" : p}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Duration */}
-        <div className="modal-section">
-          <div className="modal-label-row">
-            <label className="modal-label">Target duration</label>
-            <span className="modal-dur-val">{targetDur}s</span>
+        {/* Duration (music only) */}
+        {!isTTS && (
+          <div className="modal-section">
+            <div className="modal-label-row">
+              <label className="modal-label">Target duration</label>
+              <span className="modal-dur-val">{targetDur}s</span>
+            </div>
+            <input
+              type="range"
+              min={3}
+              max={model.maxDurationSeconds ?? 30}
+              step={1}
+              value={targetDur}
+              onChange={(e) => setTargetDur(parseInt(e.target.value))}
+              disabled={isGenerating}
+              style={{ width: "100%", accentColor: model.color }}
+            />
+            <div className="modal-dur-hint">
+              {sceneDuration > 0 && targetDur > sceneDuration
+                ? `⚠ Longer than scene (${formatDuration(sceneDuration)})`
+                : sceneDuration > 0
+                ? `${Math.round((targetDur / sceneDuration) * 100)}% of scene length`
+                : "No video clips on timeline yet"}
+            </div>
           </div>
-          <input
-            type="range"
-            min={3}
-            max={30}
-            step={1}
-            value={targetDur}
-            onChange={(e) => setTargetDur(parseInt(e.target.value))}
-            disabled={isGenerating}
-            style={{ width: "100%", accentColor: "#8b5cf6" }}
-          />
-          <div className="modal-dur-hint">
-            {targetDur > sceneDuration
-              ? `⚠ Longer than scene (${formatDuration(sceneDuration)}) — music will extend past video`
-              : `Matches ${Math.round((targetDur / sceneDuration) * 100)}% of scene`}
-          </div>
-        </div>
+        )}
 
         {/* Progress */}
         {isGenerating && (
@@ -193,24 +233,18 @@ export default function AudioGenModal({
             <div className="modal-progress-track">
               <div
                 className="modal-progress-fill"
-                style={{ width: `${progressPct}%` }}
+                style={{
+                  width: `${progressPct}%`,
+                  background: `linear-gradient(90deg, ${model.color}, ${model.color}aa)`,
+                }}
               />
             </div>
             <div className="modal-progress-label">{statusText}</div>
           </div>
         )}
 
-        {/* Status when idle/done/error */}
         {!isGenerating && phase.state !== "idle" && (
-          <div
-            className={`modal-status ${
-              phase.state === "error"
-                ? "modal-status-error"
-                : phase.state === "ready"
-                ? "modal-status-ok"
-                : ""
-            }`}
-          >
+          <div className={`modal-status ${phase.state === "error" ? "modal-status-error" : phase.state === "ready" ? "modal-status-ok" : ""}`}>
             {statusText}
           </div>
         )}
@@ -219,13 +253,9 @@ export default function AudioGenModal({
         {previewUrl && (
           <div className="modal-preview">
             <div className="modal-preview-label">
-              Preview — {resultDur.toFixed(1)}s generated
+              Preview — {resultDur.toFixed(1)}s · {model.sampleRate / 1000} kHz
             </div>
-            <audio
-              src={previewUrl}
-              controls
-              style={{ width: "100%", height: 36 }}
-            />
+            <audio src={previewUrl} controls style={{ width: "100%", height: 36 }} />
           </div>
         )}
 
@@ -233,19 +263,16 @@ export default function AudioGenModal({
         <div className="modal-actions">
           <button
             className="modal-btn-generate"
+            style={{ background: isGenerating ? undefined : model.color }}
             onClick={handleGenerate}
             disabled={isGenerating || !prompt.trim()}
           >
-            {isGenerating
-              ? "Generating…"
-              : resultBlob
-              ? "↺ Regenerate"
-              : "✦ Generate"}
+            {isGenerating ? "Generating…" : resultBlob ? "↺ Regenerate" : "✦ Generate"}
           </button>
 
           {resultBlob && (
             <button className="modal-btn-add" onClick={handleAdd}>
-              + Add to A1 Track
+              + Add to Track
             </button>
           )}
 
@@ -254,11 +281,9 @@ export default function AudioGenModal({
           </button>
         </div>
 
-        {/* First-use note */}
-        {!isModelCached() && phase.state === "idle" && (
+        {!isModelLoaded(model.id) && phase.state === "idle" && (
           <div className="modal-footnote">
-            MusicGen Small (~183 MB) downloads once and is cached in your browser.
-            WebGPU accelerated if available (Chrome 113+).
+            {model.name} ({model.size}) downloads once and is cached in your browser.
           </div>
         )}
       </div>
