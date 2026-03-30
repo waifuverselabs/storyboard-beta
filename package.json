@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "cp node_modules/onnxruntime-web/dist/ort.bundle.min.mjs node_modules/kokoro-js/dist/ && cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm node_modules/kokoro-js/dist/ && mkdir -p public/ort-wasm && cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded*.wasm public/ort-wasm/ && cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs public/ort-wasm/"
+    "postinstall": "cp node_modules/onnxruntime-web/dist/ort.bundle.min.mjs node_modules/kokoro-js/dist/ && cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm node_modules/kokoro-js/dist/ && mkdir -p public/ort-wasm && cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded*.wasm public/ort-wasm/ && cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded*.mjs public/ort-wasm/"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.10",

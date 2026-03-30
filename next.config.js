@@ -28,17 +28,19 @@ const nextConfig = {
         __dirname,
         "node_modules/kokoro-js/dist/kokoro.web.js"
       ),
-      // Use the CJS bundle — zero import.meta, initialises ort.env.wasm correctly.
+      // Use the ESM bundle variant. ort.bundle.min.mjs annotates all its dynamic
+      // WASM imports with /*webpackIgnore:true*/ so webpack does not intercept
+      // them — they become native browser fetch/import calls resolved by wasmPaths.
       // Both the bare import and the /webgpu subpath alias to the same module so
       // that @huggingface/transformers (which imports onnxruntime-web/webgpu) and
-      // our direct import share the SAME singleton — one config call covers both.
+      // our direct import share ONE singleton configured in ortConfigured.
       "onnxruntime-web$": path.resolve(
         __dirname,
-        "node_modules/onnxruntime-web/dist/ort.min.js"
+        "node_modules/onnxruntime-web/dist/ort.bundle.min.mjs"
       ),
       "onnxruntime-web/webgpu": path.resolve(
         __dirname,
-        "node_modules/onnxruntime-web/dist/ort.min.js"
+        "node_modules/onnxruntime-web/dist/ort.bundle.min.mjs"
       ),
       "onnxruntime-node$": false,
       "sharp$": false,
@@ -50,7 +52,7 @@ const nextConfig = {
     // SWC rejects import.meta when minifying webpack's CJS output chunks.
     const stripImportMetaLoader = path.resolve(__dirname, "lib/strip-import-meta-loader.js");
     config.module.rules.push({
-      test: /node_modules[\\/](kokoro-js[\\/]dist[\\/]kokoro\.web\.js|@huggingface[\\/]transformers[\\/]dist[\\/]transformers\.web\.js)$/,
+      test: /node_modules[\\/](kokoro-js[\\/]dist[\\/]kokoro\.web\.js|@huggingface[\\/]transformers[\\/]dist[\\/]transformers\.web\.js|onnxruntime-web[\\/]dist[\\/]ort\.bundle\.min\.mjs)$/,
       use: [{ loader: stripImportMetaLoader }],
     });
 

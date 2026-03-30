@@ -21,12 +21,16 @@ import type { LoadPhase } from "./musicgen";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const pipelines = new Map<string, any>();
 
-// Configure onnxruntime-web before any model loads:
-// - proxy: false → run WASM on this thread, no blob-URL sub-worker
-// - numThreads: 1 → single-threaded WASM (no SharedArrayBuffer needed)
-// - wasmPaths: served from /_next/static/ort-wasm/ (copied by postinstall)
+// Configure onnxruntime-web before any model loads.
+// We alias both "onnxruntime-web" and "onnxruntime-web/webgpu" to
+// ort.bundle.min.mjs so this one config call covers @huggingface/transformers
+// (which imports onnxruntime-web/webgpu) and our direct usage.
+// - proxy: false  → WASM runs on THIS thread; no proxy sub-worker
+// - numThreads: 1 → single-threaded; no Emscripten pthread worker pool
+// - wasmPaths    → tell ort where to fetch the .wasm binaries (public/ort-wasm/)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ortConfigured = import("onnxruntime-web").then((ort: any) => {
+const ortConfigured = import("onnxruntime-web").then((mod: any) => {
+  const ort = mod.default ?? mod;
   ort.env.wasm.proxy = false;
   ort.env.wasm.numThreads = 1;
   ort.env.wasm.wasmPaths = "/ort-wasm/";
