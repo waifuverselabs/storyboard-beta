@@ -29,6 +29,11 @@ const nextConfig = {
         __dirname,
         "node_modules/kokoro-js/dist/kokoro.web.js"
       ),
+      // Use the CJS bundle — zero import.meta, initialises ort.env.wasm correctly
+      "onnxruntime-web$": path.resolve(
+        __dirname,
+        "node_modules/onnxruntime-web/dist/ort.min.js"
+      ),
       "onnxruntime-node$": false,
       "sharp$": false,
     };
@@ -49,7 +54,7 @@ const nextConfig = {
     // SWC rejects import.meta when minifying webpack's CJS output chunks.
     const stripImportMetaLoader = path.resolve(__dirname, "lib/strip-import-meta-loader.js");
     config.module.rules.push({
-      test: /node_modules[\\/](kokoro-js[\\/]dist[\\/]kokoro\.web\.js|@huggingface[\\/]transformers[\\/]dist[\\/]transformers\.web\.js|onnxruntime-web[\\/]dist[\\/]ort.*\.mjs)$/,
+      test: /node_modules[\\/](kokoro-js[\\/]dist[\\/]kokoro\.web\.js|@huggingface[\\/]transformers[\\/]dist[\\/]transformers\.web\.js)$/,
       use: [{ loader: stripImportMetaLoader }],
     });
 

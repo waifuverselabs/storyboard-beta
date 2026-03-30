@@ -23,15 +23,13 @@ const pipelines = new Map<string, any>();
 
 // Configure onnxruntime-web before any model loads:
 // - proxy: false → run WASM on this thread, no blob-URL sub-worker
-// - numThreads: 1 → no SharedArrayBuffer threading needed
+// - numThreads: 1 → single-threaded WASM (no SharedArrayBuffer needed)
+// - wasmPaths: served from /_next/static/ort-wasm/ (copied by postinstall)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ortConfigured = import("onnxruntime-web").then((ort: any) => {
-  try {
-    if (ort?.env?.wasm) {
-      ort.env.wasm.proxy = false;
-      ort.env.wasm.numThreads = 1;
-    }
-  } catch { /* ignore */ }
+  ort.env.wasm.proxy = false;
+  ort.env.wasm.numThreads = 1;
+  ort.env.wasm.wasmPaths = "/ort-wasm/";
 }).catch(() => {});
 
 async function getOrLoadPipeline(

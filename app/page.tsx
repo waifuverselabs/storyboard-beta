@@ -447,19 +447,24 @@ export default function EditorPage() {
   }, [mediaItems, exportUrl, addLog]);
 
   // ── Global drag-over (file drop) ──────────────────────────────────────────
+  // Use a counter so nested dragenter/dragleave pairs don't cause flicker/stuck.
 
   useEffect(() => {
+    let depth = 0;
     const over = (e: DragEvent) => {
-      // Only show overlay if dragging files from OS, not internal clips
-      if (e.dataTransfer?.types.includes("Files")) {
-        e.preventDefault();
-        setGlobalDragOver(true);
-      }
+      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
     };
-    const leave = (e: DragEvent) => {
-      if (!e.relatedTarget) setGlobalDragOver(false);
+    const enter = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes("Files")) return;
+      depth++;
+      setGlobalDragOver(true);
+    };
+    const leave = () => {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) setGlobalDragOver(false);
     };
     const drop = (e: DragEvent) => {
+      depth = 0;
       setGlobalDragOver(false);
       if (e.dataTransfer?.files.length) {
         e.preventDefault();
@@ -467,10 +472,12 @@ export default function EditorPage() {
       }
     };
     window.addEventListener("dragover", over);
+    window.addEventListener("dragenter", enter);
     window.addEventListener("dragleave", leave);
     window.addEventListener("drop", drop);
     return () => {
       window.removeEventListener("dragover", over);
+      window.removeEventListener("dragenter", enter);
       window.removeEventListener("dragleave", leave);
       window.removeEventListener("drop", drop);
     };
