@@ -16,6 +16,7 @@ interface TimelineProps {
   onUpdateClip: (id: string, patch: Partial<TimelineClip>) => void;
   onDeleteClip: (id: string) => void;
   onDropMedia: (mediaId: string, trackId: string, startTime: number) => void;
+  onDropFiles: (files: FileList, trackId: string, startTime: number) => void;
   onAddTrack: (kind: "video" | "audio") => void;
   onToggleMute: (trackId: string) => void;
 }
@@ -61,6 +62,7 @@ export default function Timeline({
   onUpdateClip,
   onDeleteClip,
   onDropMedia,
+  onDropFiles,
   onAddTrack,
   onToggleMute,
 }: TimelineProps) {
@@ -176,12 +178,19 @@ export default function Timeline({
   const onTrackDrop = (e: React.DragEvent, trackId: string) => {
     e.preventDefault();
     setDragOverTrack(null);
-    const mediaId = e.dataTransfer.getData("mediaId");
-    if (!mediaId) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const scrollLeft = scrollRef.current?.scrollLeft ?? 0;
     const x = e.clientX - rect.left + scrollLeft - TRACK_LABEL_W;
     const startTime = Math.max(0, x / zoom);
+
+    // External file drop — import and place directly
+    if (e.dataTransfer.files.length > 0) {
+      onDropFiles(e.dataTransfer.files, trackId, startTime);
+      return;
+    }
+
+    const mediaId = e.dataTransfer.getData("mediaId");
+    if (!mediaId) return;
     onDropMedia(mediaId, trackId, startTime);
   };
 

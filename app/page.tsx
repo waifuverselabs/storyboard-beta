@@ -250,6 +250,32 @@ export default function EditorPage() {
     [mediaItems, addClipToTimeline]
   );
 
+  const handleDropFilesToTimeline = useCallback(
+    async (files: FileList, trackId: string, startTime: number) => {
+      const fileArr = Array.from(files);
+      let offset = startTime;
+      for (const file of fileArr) {
+        const isVideo = file.type.startsWith("video/");
+        const isAudio = file.type.startsWith("audio/");
+        if (!isVideo && !isAudio) continue;
+        const url = URL.createObjectURL(file);
+        const kind: MediaKind = isVideo ? "video" : "audio";
+        const duration = await loadMediaDuration(url, kind);
+        const { w, h } = isVideo ? await loadVideoDimensions(url) : { w: 0, h: 0 };
+        const thumbnail = isVideo ? await captureThumbnail(url) : null;
+        const item: MediaItem = {
+          id: generateId(), name: file.name, file, url, kind,
+          duration, width: w, height: h, thumbnail,
+        };
+        setMediaItems((prev) => [...prev, item]);
+        addClipToTimeline(item, trackId, offset);
+        offset += duration;
+        addLog(`✓ ${file.name} → timeline at ${startTime.toFixed(1)}s`, "success");
+      }
+    },
+    [addClipToTimeline, addLog]
+  );
+
   // ── Playback ──────────────────────────────────────────────────────────────
 
   const togglePlay = useCallback(() => {
@@ -543,6 +569,7 @@ export default function EditorPage() {
             onUpdateClip={updateClip}
             onDeleteClip={deleteClip}
             onDropMedia={handleDropMedia}
+            onDropFiles={handleDropFilesToTimeline}
             onAddTrack={addTrack}
             onToggleMute={toggleMute}
           />

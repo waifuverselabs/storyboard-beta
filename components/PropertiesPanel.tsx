@@ -39,6 +39,9 @@ function Slider({
         step={step}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
+        style={{
+          background: `linear-gradient(to right, #8b5cf6 ${((value - min) / (max - min)) * 100}%, #2d2d2d 0%)`,
+        }}
       />
       <span className="props-value" style={{ minWidth: 36, textAlign: "right" }}>
         {format(value)}
@@ -67,7 +70,7 @@ export default function PropertiesPanel({
 
       {!selectedClip ? (
         <div className="props-empty">
-          <span style={{ fontSize: 24 }}>☝</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="1.5"><path d="M12 2a7 7 0 0 1 7 7v3l2 3H3l2-3V9a7 7 0 0 1 7-7z"/><path d="M9 17v1a3 3 0 0 0 6 0v-1"/></svg>
           <span>Select a clip</span>
         </div>
       ) : (

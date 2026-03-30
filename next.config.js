@@ -45,9 +45,11 @@ const nextConfig = {
 
     // kokoro.web.js (and the ort bundles it embeds) use `import.meta` which SWC
     // rejects when minifying CJS output. Strip import.meta before bundling.
+    // Strip import.meta from all pre-bundled browser bundles before SWC sees them.
+    // SWC rejects import.meta when minifying webpack's CJS output chunks.
     const stripImportMetaLoader = path.resolve(__dirname, "lib/strip-import-meta-loader.js");
     config.module.rules.push({
-      test: /node_modules[\\/](kokoro-js[\\/]dist[\\/]kokoro\.web\.js|onnxruntime-web[\\/]dist[\\/]ort.*\.mjs)$/,
+      test: /node_modules[\\/](kokoro-js[\\/]dist[\\/]kokoro\.web\.js|@huggingface[\\/]transformers[\\/]dist[\\/]transformers\.web\.js|onnxruntime-web[\\/]dist[\\/]ort.*\.mjs)$/,
       use: [{ loader: stripImportMetaLoader }],
     });
 

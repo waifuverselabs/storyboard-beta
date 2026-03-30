@@ -34,12 +34,10 @@ async function getOrLoadPipeline(
   if (model.engine === "kokoro") {
     const { KokoroTTS, env: kokoroEnv } = await import("kokoro-js");
 
-    // Disable WASM proxy — run inference directly on this worker thread.
-    // Without this, kokoro spawns a sub-worker from ort.bundle.min.mjs which
-    // is stubbed out (webpack can't minify its import.meta usage), causing
-    // "no available backend" at runtime.
+    // Disable WASM proxy so kokoro runs inference on this thread directly.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (kokoroEnv as any).backends.onnx.wasm.proxy = false;
+    const onnxEnv = (kokoroEnv as any)?.backends?.onnx;
+    if (onnxEnv?.wasm) onnxEnv.wasm.proxy = false;
 
     postPhase({ state: "downloading", file: "model config", pct: 0 });
 

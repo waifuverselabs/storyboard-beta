@@ -195,7 +195,12 @@ export default function Preview({
 
         {/* Volume */}
         <div className="preview-vol">
-          <span className="preview-vol-icon">{volume === 0 ? "🔇" : "🔊"}</span>
+          <span className="preview-vol-icon">
+            {volume === 0
+              ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 0 19 10v-2m-5 10v5l-4-4H5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1h3"/></svg>
+              : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            }
+          </span>
           <input
             type="range"
             min={0}
@@ -203,6 +208,9 @@ export default function Preview({
             step={0.01}
             value={volume}
             onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+            style={{
+              background: `linear-gradient(to right, #39ff14 ${volume * 100}%, #2d2d2d 0%)`,
+            }}
           />
         </div>
       </div>
