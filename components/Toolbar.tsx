@@ -14,6 +14,7 @@ interface ToolbarProps {
   exportProgress: number;
   exportUrl: string | null;
   hasClips: boolean;
+  onOpenAudioGen: () => void;
 }
 
 export default function Toolbar({
@@ -27,6 +28,7 @@ export default function Toolbar({
   exportProgress,
   exportUrl,
   hasClips,
+  onOpenAudioGen,
 }: ToolbarProps) {
   const importRef = useRef<HTMLInputElement>(null);
 
@@ -70,6 +72,16 @@ export default function Toolbar({
         <span>{Math.round(zoom)}px/s</span>
         <button className="toolbar-zoom-btn" onClick={onZoomIn} title="Zoom in">+</button>
       </div>
+
+      {/* AI Audio */}
+      <button
+        className="toolbar-btn toolbar-btn-ghost"
+        onClick={onOpenAudioGen}
+        title="Generate AI music for this scene"
+        style={{ color: "#a78bfa" }}
+      >
+        ✦ AI Audio
+      </button>
 
       <div className="toolbar-spacer" />
 

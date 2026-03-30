@@ -20,6 +20,7 @@ import {
 import { exportTimeline } from "@/lib/ffmpeg";
 
 import Toolbar from "@/components/Toolbar";
+import AudioGenModal from "@/components/AudioGenModal";
 import MediaBin from "@/components/MediaBin";
 import Preview from "@/components/Preview";
 import Timeline from "@/components/Timeline";
@@ -69,6 +70,7 @@ export default function EditorPage() {
 
   // Editor
   const [zoom, setZoom] = useState(80); // px/sec
+  const [showAudioGen, setShowAudioGen] = useState(false);
 
   // Export
   const [exportPhase, setExportPhase] = useState<ExportPhase>("idle");
@@ -335,6 +337,63 @@ export default function EditorPage() {
     }
   }, [clips, tracks, mediaItems, exportUrl, exportPhase, addLog]);
 
+  // ── AI Audio generation → add to timeline ────────────────────────────────
+
+  const handleAudioGenAdd = useCallback(
+    async (blob: Blob, durationSeconds: number, prompt: string) => {
+      // Turn the blob into a File so it works with the rest of the pipeline
+      const safeName = prompt.slice(0, 32).replace(/[^a-z0-9]/gi, "_").toLowerCase();
+      const fileName = `ai_audio_${safeName}.wav`;
+      const file = new File([blob], fileName, { type: "audio/wav" });
+      const url = URL.createObjectURL(blob);
+
+      // Find or create an audio track to land on
+      const audioTrack = tracks.find((t) => t.kind === "audio") ?? null;
+      if (!audioTrack) {
+        addLog("No audio track found — add one first.", "warn");
+        return;
+      }
+
+      const item: MediaItem = {
+        id: generateId(),
+        name: fileName,
+        file,
+        url,
+        kind: "audio",
+        duration: durationSeconds,
+        width: 0,
+        height: 0,
+        thumbnail: null,
+      };
+
+      setMediaItems((prev) => [...prev, item]);
+
+      // Place at t=0 on A1, replacing existing audio if track is empty
+      const existingEnd = getTrackEndTime(clips, audioTrack.id);
+      const startTime = existingEnd > 0 ? existingEnd : 0;
+
+      const clip: TimelineClip = {
+        id: generateId(),
+        mediaId: item.id,
+        trackId: audioTrack.id,
+        startTime,
+        duration: durationSeconds,
+        trimStart: 0,
+        trimEnd: durationSeconds,
+        volume: 1,
+        speed: 1,
+        posX: 0,
+        posY: 0,
+        scale: 1,
+        opacity: 1,
+      };
+
+      setClips((prev) => [...prev, clip]);
+      addLog(`✦ AI audio added to ${audioTrack.label} — ${durationSeconds.toFixed(1)}s`, "success");
+    },
+    [tracks, clips, addLog]
+  );
+
   // ── Clear all ─────────────────────────────────────────────────────────────
 
   const clearAll = useCallback(() => {
@@ -413,6 +472,17 @@ export default function EditorPage() {
         </div>
       )}
 
+      {/* AI Audio modal */}
+      {showAudioGen && (
+        <AudioGenModal
+          clips={clips}
+          tracks={tracks}
+          totalDuration={totalDuration}
+          onAdd={handleAudioGenAdd}
+          onClose={() => setShowAudioGen(false)}
+        />
+      )}
+
       {/* Toolbar */}
       <Toolbar
         onImport={importFiles}
@@ -425,6 +495,7 @@ export default function EditorPage() {
         exportProgress={exportProgress}
         exportUrl={exportUrl}
         hasClips={clips.length > 0}
+        onOpenAudioGen={() => setShowAudioGen(true)}
       />
 
       {/* Main workspace */}
