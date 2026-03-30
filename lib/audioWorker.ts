@@ -155,28 +155,31 @@ self.onmessage = async (e: MessageEvent) => {
 
       postPhase({ state: "generating", tokensGenerated: 0, maxTokens });
 
-      const result = await pipe(prompt, {
+      // Bypass TextToAudioPipeline._call_text_to_waveform: that path calls
+      // this.model(inputs) via seq2seq_forward which sets decoder input_ids to
+      // undefined → ORT "Missing inputs: input_ids" error. Call the model's
+      // own generate() directly instead — it runs the encoder, the autoregressive
+      // decoder loop, and the EnCodec decode in one call.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tokenized = (pipe as any).tokenizer(prompt, { padding: true, truncation: true });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const audioValues = await (pipe as any).model.generate({
+        inputs: tokenized.input_ids,
+        attention_mask: tokenized.attention_mask,
         max_new_tokens: maxTokens,
+        do_sample: true,
+        guidance_scale: 3.0,
       });
 
-      const raw = Array.isArray(result) ? result[0] : result;
-      const sampleRate: number = raw.sampling_rate ?? model.sampleRate;
-      const audioData: Float32Array =
-        raw.data instanceof Float32Array ? raw.data :
-        raw.audio instanceof Float32Array ? raw.audio :
-        new Float32Array(0);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sampleRate: number = (pipe as any).model.config?.sampling_rate ?? model.sampleRate;
+      const audioData: Float32Array = audioValues.data instanceof Float32Array
+        ? audioValues.data
+        : new Float32Array(audioValues.data);
 
       const dur = audioData.length / sampleRate;
-      // Use built-in toBlob if available, otherwise encode manually
-      let buffer: ArrayBuffer;
-      if (typeof raw.toBlob === "function") {
-        const blob: Blob = raw.toBlob();
-        buffer = await blob.arrayBuffer();
-      } else {
-        buffer = encodeWAV(audioData, sampleRate);
-      }
+      const buffer = encodeWAV(audioData, sampleRate);
 
-      // Transfer the buffer to the main thread (zero-copy)
       self.postMessage({ type: "done", id, buffer, durationSeconds: dur, sampleRate }, [buffer]);
       return;
     }
