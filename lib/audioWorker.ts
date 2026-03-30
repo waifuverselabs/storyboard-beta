@@ -48,20 +48,7 @@ async function getOrLoadPipeline(
 
   if (model.engine === "kokoro") {
     await ortConfigured;
-
-    // kokoro.web.js bundles its own ort-common which spawns blob-URL sub-workers
-    // for WASM threading. Hiding the Worker constructor forces it into
-    // single-threaded WASM mode (ort falls back when Worker is unavailable).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const savedWorker = (self as any).Worker;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (self as any).Worker;
-
     const { KokoroTTS } = await import("kokoro-js");
-
-    // Restore after the import so the module cache is populated
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (savedWorker !== undefined) (self as any).Worker = savedWorker;
 
     postPhase({ state: "downloading", file: "model config", pct: 0 });
 
