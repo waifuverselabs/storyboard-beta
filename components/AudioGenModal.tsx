@@ -107,7 +107,7 @@ export default function AudioGenModal({
     } catch (e) {
       setPhase({ state: "error", message: e instanceof Error ? e.message : String(e) });
     }
-  }, [isGenerating, model, prompt, targetDur]);
+  }, [isGenerating, model, prompt, targetDur, speed]);
 
   const handleAdd = () => {
     if (!resultBlob) return;
