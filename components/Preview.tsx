@@ -26,7 +26,6 @@ function getActiveVideoClip(
   const videoTrackIds = new Set(
     tracks.filter((tr) => tr.kind === "video").map((tr) => tr.id)
   );
-  // Prefer earlier starting clip; pick the one covering t
   const candidates = clips.filter(
     (c) =>
       videoTrackIds.has(c.trackId) &&
@@ -35,6 +34,22 @@ function getActiveVideoClip(
   );
   if (candidates.length === 0) return null;
   return candidates.reduce((a, b) => (a.startTime <= b.startTime ? a : b));
+}
+
+function getActiveAudioClips(
+  clips: TimelineClip[],
+  tracks: Track[],
+  t: number
+): TimelineClip[] {
+  const audioTrackIds = new Set(
+    tracks.filter((tr) => tr.kind === "audio").map((tr) => tr.id)
+  );
+  return clips.filter(
+    (c) =>
+      audioTrackIds.has(c.trackId) &&
+      c.startTime <= t &&
+      c.startTime + c.duration > t
+  );
 }
 
 export default function Preview({
@@ -57,6 +72,9 @@ export default function Preview({
   const isPlayingRef = useRef(isPlaying);
   const playheadRef = useRef(playhead);
 
+  // One HTMLAudioElement per active clip instance (keyed by clip.id)
+  const audioElemsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { playheadRef.current = playhead; }, [playhead]);
 
@@ -77,7 +95,6 @@ export default function Preview({
       const media = mediaItems.find((m) => m.id === clip.mediaId);
       if (!media || media.kind !== "video") return;
 
-      // Switch source if needed
       if (currentMediaIdRef.current !== clip.mediaId) {
         v.src = media.url;
         v.load();
@@ -99,10 +116,71 @@ export default function Preview({
     [clips, tracks, mediaItems, volume]
   );
 
+  // ── Sync audio elements to playhead ──────────────────────────────────────
+  const syncAudio = useCallback(
+    (t: number, playing: boolean, forceSeek = false) => {
+      const activeClips = getActiveAudioClips(clips, tracks, t);
+      const activeIds = new Set(activeClips.map((c) => c.id));
+
+      // Pause and discard elements that are no longer in the active window
+      for (const [clipId, audio] of audioElemsRef.current.entries()) {
+        if (!activeIds.has(clipId)) {
+          audio.pause();
+          audioElemsRef.current.delete(clipId);
+        }
+      }
+
+      for (const clip of activeClips) {
+        const media = mediaItems.find((m) => m.id === clip.mediaId);
+        if (!media) continue;
+
+        let audio = audioElemsRef.current.get(clip.id);
+        if (!audio) {
+          audio = new Audio(media.url);
+          audio.preload = "auto";
+          audioElemsRef.current.set(clip.id, audio);
+          forceSeek = true;
+        }
+
+        const track = tracks.find((tr) => tr.id === clip.trackId);
+        const muted = track?.muted ?? false;
+
+        const sourceTime = clip.trimStart + (t - clip.startTime) * clip.speed;
+        const targetTime = Math.max(
+          clip.trimStart,
+          Math.min(clip.trimEnd, sourceTime)
+        );
+
+        if (forceSeek || Math.abs(audio.currentTime - targetTime) > 0.2) {
+          audio.currentTime = targetTime;
+        }
+
+        audio.volume = muted ? 0 : Math.max(0, Math.min(1, (clip.volume ?? 1) * volume));
+        audio.playbackRate = clip.speed;
+
+        if (playing && audio.paused) {
+          audio.play().catch(() => {});
+        } else if (!playing && !audio.paused) {
+          audio.pause();
+        }
+      }
+    },
+    [clips, tracks, mediaItems, volume]
+  );
+
+  const pauseAllAudio = useCallback(() => {
+    for (const audio of audioElemsRef.current.values()) {
+      audio.pause();
+    }
+  }, []);
+
   // ── RAF-based playback loop ────────────────────────────────────────────────
   useEffect(() => {
     if (isPlaying) {
       lastWallRef.current = performance.now();
+      // Seek all audio to correct position before starting
+      syncAudio(playheadRef.current, false, true);
+
       const tick = () => {
         if (!isPlayingRef.current) return;
         const now = performance.now();
@@ -112,15 +190,20 @@ export default function Preview({
         const newT = Math.min(playheadRef.current + dt, totalDuration);
         onPlayheadChange(newT);
         syncVideo(newT);
+        syncAudio(newT, true);
 
         if (newT >= totalDuration) {
+          pauseAllAudio();
           onPlayToggle(); // stop
           return;
         }
         rafRef.current = requestAnimationFrame(tick);
       };
       rafRef.current = requestAnimationFrame(tick);
-      return () => cancelAnimationFrame(rafRef.current);
+      return () => {
+        cancelAnimationFrame(rafRef.current);
+        pauseAllAudio();
+      };
     }
   }, [isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -128,8 +211,20 @@ export default function Preview({
   useEffect(() => {
     if (!isPlaying) {
       syncVideo(playhead, false);
+      syncAudio(playhead, false, true);
     }
-  }, [playhead, isPlaying, syncVideo]);
+  }, [playhead, isPlaying, syncVideo, syncAudio]);
+
+  // ── Cleanup audio elements on unmount ─────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      for (const audio of audioElemsRef.current.values()) {
+        audio.pause();
+        audio.src = "";
+      }
+      audioElemsRef.current.clear();
+    };
+  }, []);
 
   const activeClip = getActiveVideoClip(clips, tracks, playhead);
   const hasVideo = activeClip !== null;
